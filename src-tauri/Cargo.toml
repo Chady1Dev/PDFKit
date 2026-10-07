@@ -1,0 +1,42 @@
+[package]
+name = "pdfkit"
+version = "0.1.0"
+description = "Ultra-lightweight local-first PDF toolbox"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "pdfkit_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.11", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+lopdf = "0.44"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp"] }
+flate2 = "1"
+getrandom = "0.2"
+windows-sys = { version = "0.61.2", features = ["Win32_Graphics_Gdi", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Printing"] }
+zip = { version = "4.2.0", default-features = false, features = ["deflate"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
+
+[profile.dev]
+debug = 1
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = 0
+

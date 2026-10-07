@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="tr" class="dark h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDFKit</title>
+    <script>
+      // Apply persisted theme before first paint to avoid a flash.
+      if (localStorage.getItem("pdfkit-theme") === "light") {
+        document.documentElement.classList.remove("dark");
+      }
+    </script>
+  </head>
+  <body class="h-full">
+    <div id="app" class="h-full"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
