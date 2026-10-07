@@ -913,7 +913,6 @@ fn try_advanced_layout_engine(
             "src-tauri/scripts/pdf2docx_engine.py",
             "scripts/pdf2docx_engine.py",
             "../src-tauri/scripts/pdf2docx_engine.py",
-            "C:\\Users\\CAGDASS\\Desktop\\PDFKit\\src-tauri\\scripts\\pdf2docx_engine.py",
         ];
         for p in &possible_script_paths {
             if Path::new(p).exists() {
@@ -928,7 +927,6 @@ fn try_advanced_layout_engine(
     // 4. Try python candidates:
     let python_candidates = [
         "python",
-        "C:\\Program Files\\Python314\\python.exe",
         "py",
         "python3",
     ];

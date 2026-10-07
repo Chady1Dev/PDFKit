@@ -2814,7 +2814,7 @@
                 >
                   <div>
                     <div class="font-medium">Daksil</div>
-                    <div class="text-[10px] text-zinc-400 font-normal">PDF üzerindeki alanı beyazlatır</div>
+                    <div class="text-[10px] text-zinc-400 font-normal">Alanı beyazlatır (görsel gizler, metin altta kalır)</div>
                   </div>
                   {#if eraserMode === 'whiteout'}<Check size={13} class="text-indigo-600 dark:text-indigo-400" />{/if}
                 </button>

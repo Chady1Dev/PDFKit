@@ -1905,6 +1905,7 @@ pub fn apply_overlays(
     let page_map = doc.get_pages();
     let total_pages = page_map.len() as u32;
     let mut created_stream_ids = Vec::new();
+    let mut has_redactions = false;
 
     for (idx, overlay) in overlays.into_iter().enumerate() {
         let Some(&page_id) = page_map.get(&overlay.page) else {
@@ -1940,6 +1941,7 @@ pub fn apply_overlays(
 
         let page = doc.get_dictionary_mut(page_id)?;
         if overlay.replace_page_content {
+            has_redactions = true;
             // True physical redaction: replace Contents stream entirely with the flattened raster stream.
             // All original vector text operators ((text) Tj / TJ) and glyph streams are permanently destroyed!
             page.set("Contents", Object::Reference(stream_id));
@@ -1982,6 +1984,12 @@ pub fn apply_overlays(
     } else {
         output.to_path_buf()
     };
+
+    if has_redactions {
+        // Physical purge of all orphaned vector streams, text glyphs, and unreferenced resources
+        // ensuring zero remnant of redacted text remains in the document object table.
+        doc.prune_objects();
+    }
 
     doc.compress();
     doc.save(&target_save)?;

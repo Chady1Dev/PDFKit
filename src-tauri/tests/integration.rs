@@ -1140,5 +1140,67 @@ fn test_inspect_real_exam_page_number() {
     assert!(found_disclaimer, "Disclaimer text at bottom must be completely preserved!");
 }
 
+#[test]
+fn test_redaction_physically_purges_unreferenced_text() {
+    let ws = workspace("redaction_purge");
+    let src = ws.join("secret_doc.pdf");
+    make_pdf(&src, 1);
+
+    // Embed top secret text into src.pdf
+    let mut doc = Document::load(&src).unwrap();
+    let page_id = doc.page_iter().next().unwrap();
+    let secret_stream = b"BT /F1 16 Tf 1 0 0 1 50 150 Tm (CONFIDENTIAL_CARD_NUMBER_4111_2222) Tj ET".to_vec();
+    doc.add_page_contents(page_id, secret_stream).unwrap();
+    doc.save(&src).unwrap();
+
+    // Verify secret text exists in the document
+    let raw_before = std::fs::read(&src).unwrap();
+    let str_before = String::from_utf8_lossy(&raw_before);
+    assert!(str_before.contains("CONFIDENTIAL_CARD_NUMBER_4111_2222"));
+
+    // Apply redaction overlay with replace_page_content = true
+    let out = ws.join("redacted_doc.pdf");
+    let img = image::RgbaImage::from_pixel(200, 200, image::Rgba([0, 0, 0, 255]));
+    let mut buf = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut buf, image::ImageFormat::Png).unwrap();
+    let png_data = buf.into_inner();
+
+    let overlays = vec![pdfkit_lib::commands::annotate::PageOverlay {
+        page: 1,
+        png_data,
+        replace_page_content: true,
+    }];
+
+    let res = run(commands::annotate::stamp_page_overlays(
+        src.to_string_lossy().into_owned(),
+        out.to_string_lossy().into_owned(),
+        overlays,
+        None,
+        None,
+    ))
+    .unwrap();
+
+    assert_eq!(res.total_pages, 1);
+
+    // Verify that the secret text is completely purged from raw bytes and all objects
+    let raw_after = std::fs::read(&out).unwrap();
+    let str_after = String::from_utf8_lossy(&raw_after);
+    assert!(
+        !str_after.contains("CONFIDENTIAL_CARD_NUMBER_4111_2222"),
+        "Redacted text must NOT exist anywhere in raw output bytes!"
+    );
+
+    let check_doc = Document::load(&out).unwrap();
+    for (_, obj) in check_doc.objects.iter() {
+        if let Ok(stream) = obj.as_stream() {
+            let stream_str = String::from_utf8_lossy(&stream.content);
+            assert!(
+                !stream_str.contains("CONFIDENTIAL_CARD_NUMBER"),
+                "Redacted text must NOT exist in any object stream in the document!"
+            );
+        }
+    }
+}
+
 
 
