@@ -32,6 +32,14 @@
     "resources": [
       "scripts/*"
     ],
+    "fileAssociations": [
+      {
+        "ext": ["pdf"],
+        "name": "PDF Belgesi",
+        "description": "Portable Document Format",
+        "role": "Editor"
+      }
+    ],
     "windows": {
       "nsis": {
         "installMode": "both"

@@ -25,6 +25,7 @@ flate2 = "1"
 getrandom = "0.2"
 windows-sys = { version = "0.61.2", features = ["Win32_Graphics_Gdi", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Printing"] }
 zip = { version = "4.2.0", default-features = false, features = ["deflate"] }
+tauri-plugin-single-instance = "2"
 
 [profile.release]
 codegen-units = 1

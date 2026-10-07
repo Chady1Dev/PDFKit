@@ -1,6 +1,7 @@
 import { writable, get } from "svelte/store";
 import { openPdf, type PdfDocHandle } from "./pdf";
 import { baseName, loadEditorDocument } from "./api";
+import { addRecentFile } from "./recentFiles";
 
 export interface Annotation {
   id: string;
@@ -130,6 +131,7 @@ export async function openPdfDocument(path: string, forceReload = false): Promis
         return [...docs, newDoc];
       });
       activeDocId.set(id);
+      addRecentFile(path, newDoc.name, newDoc.pageCount);
       return id;
     } finally {
       inFlightOpens.delete(normPath);

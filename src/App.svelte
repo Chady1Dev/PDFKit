@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { currentView, theme, pendingFiles, type ViewId } from "./lib/stores";
@@ -27,9 +28,40 @@
   let showExitModal = false;
   let unlistenDrop: (() => void) | undefined;
   let unlistenClose: (() => void) | undefined;
+  let unlistenSingleInstance: (() => void) | undefined;
   let hoveredDropView: ViewId | null = null;
 
   onMount(async () => {
+    // 1. Single instance listener (files opened externally while running)
+    try {
+      unlistenSingleInstance = await listen<string[]>("open-files", async (event) => {
+        const rawArgs = event.payload || [];
+        const pdfs = rawArgs.filter((p) => typeof p === "string" && p.toLowerCase().endsWith(".pdf"));
+        for (const pdf of pdfs) {
+          await openPdfDocument(pdf);
+        }
+        if (pdfs.length > 0) {
+          currentView.set("editor");
+        }
+      });
+    } catch (e) {
+      console.warn("Single-instance listener failed:", e);
+    }
+
+    // 2. Initial launch arguments (files opened on startup)
+    try {
+      const initialArgs = await invoke<string[]>("get_cli_args");
+      const pdfs = (initialArgs || []).filter((p) => typeof p === "string" && p.toLowerCase().endsWith(".pdf"));
+      for (const pdf of pdfs) {
+        await openPdfDocument(pdf);
+      }
+      if (pdfs.length > 0) {
+        currentView.set("editor");
+      }
+    } catch (e) {
+      console.warn("Initial CLI args fetch failed:", e);
+    }
+
     try {
       unlistenDrop = await getCurrentWebview().onDragDropEvent(async (event) => {
         if (event.payload.type === "over") {
@@ -93,6 +125,7 @@
   onDestroy(() => {
     unlistenDrop?.();
     unlistenClose?.();
+    unlistenSingleInstance?.();
   });
 
   async function forceExitApp() {

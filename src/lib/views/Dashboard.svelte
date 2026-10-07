@@ -1,8 +1,11 @@
 <script lang="ts">
   import { currentView, type ViewId } from "../stores";
+  import { openPdfDocument } from "../docStore";
+  import { recentFiles, removeRecentFile, clearRecentFiles, type RecentFile } from "../recentFiles";
   import {
     FilePlus2, Scissors, RotateCw, FileArchive, Image,
     Lock, Stamp, FileSignature, PenLine, Sparkles, History,
+    FileText, Clock, Trash2, X, ChevronRight,
   } from "@lucide/svelte";
 
   interface ToolCard {
@@ -11,6 +14,28 @@
     description: string;
     icon: typeof FilePlus2;
     phase: 1 | 2;
+  }
+
+  function formatTime(timestamp: number): string {
+    const diff = Date.now() - timestamp;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Az önce";
+    if (mins < 60) return `${mins} dk önce`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} saat önce`;
+    const days = Math.floor(hours / 24);
+    if (days === 1) return "Dün";
+    if (days < 7) return `${days} gün önce`;
+    return new Date(timestamp).toLocaleDateString("tr-TR");
+  }
+
+  async function handleOpenRecent(file: RecentFile) {
+    try {
+      await openPdfDocument(file.path);
+      currentView.set("editor");
+    } catch (e) {
+      console.warn("Could not open recent file:", e);
+    }
   }
 
   const tools: ToolCard[] = [
@@ -45,6 +70,59 @@
       <PenLine size={16} /> Editörü Başlat
     </button>
   </div>
+
+  {#if $recentFiles.length > 0}
+    <div class="mb-6">
+      <div class="mb-2 flex items-center justify-between">
+        <h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+          <Clock size={13} /> Son Açılan Dosyalar
+        </h3>
+        <button
+          class="flex items-center gap-1 text-xs text-zinc-400 hover:text-red-500 transition-colors"
+          on:click={clearRecentFiles}
+          title="Son açılanlar listesini temizle"
+        >
+          <Trash2 size={12} /> Temizle
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {#each $recentFiles as file}
+          <div
+            class="group relative flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left transition-all hover:border-indigo-400 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-indigo-600"
+          >
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 text-left"
+              on:click={() => handleOpenRecent(file)}
+            >
+              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400">
+                <FileText size={18} />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-zinc-800 group-hover:text-indigo-600 dark:text-zinc-200 dark:group-hover:text-indigo-400">
+                  {file.name}
+                </p>
+                <div class="flex items-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
+                  <span>{formatTime(file.lastOpened)}</span>
+                  {#if file.pageCount}
+                    <span>•</span>
+                    <span>{file.pageCount} sayfa</span>
+                  {/if}
+                </div>
+              </div>
+            </button>
+            <button
+              class="p-1 rounded text-zinc-400 hover:text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity"
+              on:click|stopPropagation={() => removeRecentFile(file.path)}
+              title="Listeden kaldır"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <h2 class="mb-4 text-xl font-bold text-zinc-900 dark:text-zinc-100">PDF Araçları</h2>
 

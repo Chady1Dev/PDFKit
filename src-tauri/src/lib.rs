@@ -10,6 +10,8 @@ mod error;
 mod pdfutil;
 pub mod types;
 
+use tauri::{Emitter, Manager};
+
 pub use error::PdfError;
 
 #[tauri::command]
@@ -17,13 +19,27 @@ fn exit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn get_cli_args() -> Vec<String> {
+    std::env::args().skip(1).collect()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let _ = app.emit("open-files", &args);
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             exit_app,
+            get_cli_args,
             // Phase 1 — core
             commands::document::get_pdf_info,
             commands::document::reveal_in_explorer,
