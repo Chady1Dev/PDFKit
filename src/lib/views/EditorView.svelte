@@ -1,18 +1,21 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { open, save } from "@tauri-apps/plugin-dialog";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import {
     MousePointer, Type, PenLine, Highlighter, Square, Circle,
     ArrowUpRight, Minus, ShieldAlert, FileSignature, Undo2, Redo2,
     Trash2, ZoomIn, ZoomOut, Save, ChevronLeft,
     ChevronRight, Check, X, Plus, FileText, PanelLeftClose, PanelLeftOpen,
-    Eraser, Sparkles, ChevronDown, ChevronUp, Printer, Search, Stamp
+    Eraser, Sparkles, ChevronDown, ChevronUp, Printer, Search, Stamp,
+    Maximize, Layers, Underline, Strikethrough, Copy
   } from "@lucide/svelte";
   import FileDropzone from "../components/FileDropzone.svelte";
   import ActionButton from "../components/ActionButton.svelte";
   import SignaturePadModal from "../components/SignaturePadModal.svelte";
   import ConfirmModal from "../components/ConfirmModal.svelte";
   import SidebarPageThumb from "../components/SidebarPageThumb.svelte";
+  import ContinuousPage from "../components/ContinuousPage.svelte";
   import PrintModal from "../components/PrintModal.svelte";
   import ExportConvertModal from "../components/ExportConvertModal.svelte";
   import PdfSearchBar, { type SearchMatch } from "../components/PdfSearchBar.svelte";
@@ -25,7 +28,7 @@
     stampPageOverlays, removeWatermark, cleanWatermarkBytes, writePdfBytes,
     baseName, type PageOverlayPayload
   } from "../api";
-  import { openPdf } from "../pdf";
+  import { openPdf, type PdfLink } from "../pdf";
   import { pushToast, pendingFiles } from "../stores";
   import { logActivity } from "../activityStore";
 
@@ -88,6 +91,17 @@
   let showRedactionConfirmModal = false;
   let pendingSaveAs = false;
   let pendingCloseDocId: string | null = null;
+
+  // Faz 2 Reader state
+  let viewLayout: "single" | "continuous" = "single";
+  let isReadingMode = false;
+  let showZoomMenu = false;
+  let textLayerDiv: HTMLDivElement | null = null;
+  let currentLinks: PdfLink[] = [];
+  let selectedText = "";
+  let selectedTextRect: { left: number; top: number; width: number; height: number } | null = null;
+  let visiblePageRange: { start: number; end: number } = { start: 1, end: 3 };
+  let showHighlighterMenu = false;
 
   // Tools state - Default color for text is PURPLE (#9333ea) as requested!
   let currentTool: ToolMode = "select";
@@ -245,6 +259,12 @@
     }
     if (!target.closest("#style-popover-container")) {
       showStylePopover = false;
+    }
+    if (!target.closest("#zoom-dropdown-container")) {
+      showZoomMenu = false;
+    }
+    if (!target.closest("#highlighter-dropdown-container")) {
+      showHighlighterMenu = false;
     }
   }
 
@@ -590,11 +610,13 @@
   onMount(() => {
     window.addEventListener("auxclick", preventAuxDefault, { passive: false });
     window.addEventListener("click", handleWindowClick);
+    document.addEventListener("selectionchange", handleTextSelectionChange);
   });
 
   onDestroy(() => {
     window.removeEventListener("auxclick", preventAuxDefault);
     window.removeEventListener("click", handleWindowClick);
+    document.removeEventListener("selectionchange", handleTextSelectionChange);
     window.removeEventListener("mousemove", handleMiddlePanMouseMove);
     window.removeEventListener("mouseup", handleMiddlePanMouseUp);
     window.removeEventListener("mousemove", onWindowMouseMove);
@@ -630,6 +652,40 @@
     if (currentTool === "text") return "text";
     return "crosshair";
   })();
+
+  $: overlayPointerEvents =
+    currentTool !== "select" ||
+    isDraggingItem ||
+    isResizingItem ||
+    isHoveringItem ||
+    hoverResizeHandle ||
+    selectedAnnotationIds.length > 0
+      ? "auto"
+      : "none";
+
+  function handleWrapperMouseMove(e: MouseEvent) {
+    if (currentTool !== "select") return;
+    if (!activeDoc || !overlayCanvas) return;
+    const pos = getCanvasPos(e);
+    const pageList = activeDoc.annotations[activeDoc.currentPage] || [];
+    hoverResizeHandle = null;
+    if (selectedAnnotationIds.length === 1) {
+      const selectedItem = pageList.find((a) => a.id === selectedAnnotationIds[0]);
+      if (selectedItem) {
+        const bounds = getAnnotationBounds(selectedItem);
+        if (bounds) {
+          const hitHandle = findHitResizeHandle(pos, bounds, activeDoc.scale);
+          if (hitHandle) {
+            hoverResizeHandle = hitHandle;
+            isHoveringItem = false;
+            return;
+          }
+        }
+      }
+    }
+    const hit = findHitAnnotation(pos, pageList);
+    isHoveringItem = !!hit;
+  }
 
   // Eraser state: "object" (Bölgesel), "precision" (Hassas - çizim silici), "whiteout" (Daksil - arka plan da siler)
   let eraserMode: "object" | "precision" | "whiteout" = "object";
@@ -727,6 +783,22 @@
       overlayCanvas.height = rendered.height;
       overlayCtx = overlayCanvas.getContext("2d");
       redrawOverlay();
+
+      if (textLayerDiv) {
+        textLayerDiv.style.width = `${rendered.width}px`;
+        textLayerDiv.style.height = `${rendered.height}px`;
+        try {
+          await activeDoc.handle.renderTextLayer(activeDoc.currentPage, activeDoc.scale, textLayerDiv);
+        } catch (te) {
+          console.warn("renderTextLayer error:", te);
+        }
+      }
+
+      try {
+        currentLinks = await activeDoc.handle.getPageLinks(activeDoc.currentPage, activeDoc.scale);
+      } catch {
+        currentLinks = [];
+      }
     } catch (e) {
       console.error("renderCurrentPage error:", e);
     }
@@ -771,6 +843,201 @@
   function resetZoom() {
     if (!activeDoc) return;
     updateDocScale(activeDoc.id, 1.0);
+    showZoomMenu = false;
+  }
+
+  function fitToWidth() {
+    if (!activeDoc || !canvasContainer || !pdfCanvas) return;
+    const containerW = canvasContainer.clientWidth - 48;
+    const pageW = pdfCanvas.width / activeDoc.scale;
+    if (pageW > 0) {
+      const next = Math.max(0.3, Math.min(3.5, containerW / pageW));
+      updateDocScale(activeDoc.id, Math.round(next * 100) / 100);
+      showZoomMenu = false;
+    }
+  }
+
+  function fitToPage() {
+    if (!activeDoc || !canvasContainer || !pdfCanvas) return;
+    const containerW = canvasContainer.clientWidth - 48;
+    const containerH = canvasContainer.clientHeight - 80;
+    const pageW = pdfCanvas.width / activeDoc.scale;
+    const pageH = pdfCanvas.height / activeDoc.scale;
+    if (pageW > 0 && pageH > 0) {
+      const scaleW = containerW / pageW;
+      const scaleH = containerH / pageH;
+      const next = Math.max(0.3, Math.min(3.5, Math.min(scaleW, scaleH)));
+      updateDocScale(activeDoc.id, Math.round(next * 100) / 100);
+      showZoomMenu = false;
+    }
+  }
+
+  function setZoomPreset(val: number) {
+    if (!activeDoc) return;
+    updateDocScale(activeDoc.id, val);
+    showZoomMenu = false;
+  }
+
+  async function toggleReadingMode() {
+    isReadingMode = !isReadingMode;
+    try {
+      await getCurrentWindow().setFullscreen(isReadingMode);
+    } catch {}
+  }
+
+  function handleLinkClick(link: PdfLink, e?: MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+    if (link.destPage && link.destPage >= 1 && activeDoc && link.destPage <= activeDoc.pageCount) {
+      setPage(link.destPage);
+      if (viewLayout === "continuous") {
+        document.getElementById(`continuous-page-${link.destPage}`)?.scrollIntoView({ behavior: "smooth" });
+      }
+      pushToast({ message: `Sayfa ${link.destPage}'e gidildi`, type: "info" });
+    } else if (link.url) {
+      window.open(link.url, "_blank");
+    }
+  }
+
+  function handleTextSelectionChange() {
+    if (currentTool !== "select") {
+      selectedText = "";
+      selectedTextRect = null;
+      return;
+    }
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+      selectedText = "";
+      selectedTextRect = null;
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      selectedText = sel.toString().trim();
+      selectedTextRect = {
+        left: rect.left + rect.width / 2,
+        top: rect.top - 8,
+        width: rect.width,
+        height: rect.height,
+      };
+    }
+  }
+
+  async function copySelectedText() {
+    if (!selectedText) return;
+    try {
+      await navigator.clipboard.writeText(selectedText);
+      pushToast({ message: "Metin kopyalandı", type: "success" });
+    } catch {}
+  }
+
+  function applyTextAction(action: "highlight" | "underline" | "strikethrough") {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !overlayCanvas || !activeDoc) return;
+    const range = sel.getRangeAt(0);
+    const clientRects = Array.from(range.getClientRects());
+    if (clientRects.length === 0) return;
+
+    const canvasRect = overlayCanvas.getBoundingClientRect();
+    const s = activeDoc.scale;
+    const page = activeDoc.currentPage;
+    pushHistory(activeDoc.id, page);
+
+    const newAnns: Annotation[] = [];
+    for (const cr of clientRects) {
+      const x = (cr.left - canvasRect.left) / s;
+      const y = (cr.top - canvasRect.top) / s;
+      const w = cr.width / s;
+      const h = cr.height / s;
+      if (w <= 0 || h <= 0) continue;
+
+      if (action === "highlight") {
+        newAnns.push({
+          id: `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          type: "rect",
+          x,
+          y,
+          width: w,
+          height: h,
+          color: "transparent",
+          fillColor: currentColor && currentColor.startsWith("rgba") ? currentColor : "rgba(250, 204, 21, 0.45)",
+          opacity: 0.85,
+        });
+      } else if (action === "underline") {
+        newAnns.push({
+          id: `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          type: "line",
+          startX: x,
+          startY: y + h - 1,
+          endX: x + w,
+          endY: y + h - 1,
+          color: currentColor && currentColor !== "transparent" ? currentColor : "#dc2626",
+          strokeWidth: 2,
+          opacity: 1,
+        });
+      } else if (action === "strikethrough") {
+        newAnns.push({
+          id: `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          type: "line",
+          startX: x,
+          startY: y + h / 2,
+          endX: x + w,
+          endY: y + h / 2,
+          color: currentColor && currentColor !== "transparent" ? currentColor : "#dc2626",
+          strokeWidth: 2,
+          opacity: 1,
+        });
+      }
+    }
+
+    if (newAnns.length > 0) {
+      const list = [...(activeDoc.annotations[page] || []), ...newAnns];
+      activeDoc.annotations[page] = list;
+      setPageAnnotations(activeDoc.id, page, list);
+      notifyPageThumbnailsUpdated(page);
+      redrawOverlay(list);
+      sel.removeAllRanges();
+      selectedText = "";
+      selectedTextRect = null;
+      pushToast({
+        message: action === "highlight" ? "Metin vurgulandı" : action === "underline" ? "Metnin altı çizildi" : "Metnin üstü çizildi",
+        type: "success",
+      });
+    }
+  }
+
+  function handleContinuousScroll() {
+    if (viewLayout !== "continuous" || !canvasContainer || !activeDoc) return;
+    const scrollTop = canvasContainer.scrollTop;
+    const viewportHeight = canvasContainer.clientHeight;
+    const centerY = scrollTop + viewportHeight / 2;
+
+    let closestPage = activeDoc.currentPage;
+    let minDistance = Infinity;
+
+    for (let p = 1; p <= activeDoc.pageCount; p++) {
+      const el = document.getElementById(`continuous-page-${p}`);
+      if (el) {
+        const top = el.offsetTop;
+        const h = el.offsetHeight;
+        const pageCenter = top + h / 2;
+        const dist = Math.abs(pageCenter - centerY);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestPage = p;
+        }
+      }
+    }
+
+    if (closestPage !== activeDoc.currentPage) {
+      updateDocPage(activeDoc.id, closestPage);
+    }
+
+    visiblePageRange = {
+      start: Math.max(1, closestPage - 2),
+      end: Math.min(activeDoc.pageCount, closestPage + 2),
+    };
   }
 
   // --- Interaction Handlers ---
@@ -2301,6 +2568,20 @@
         return;
       }
 
+      if (e.key === "F11") {
+        e.preventDefault();
+        toggleReadingMode();
+        return;
+      }
+
+      if (e.key === "Escape") {
+        if (isReadingMode) {
+          e.preventDefault();
+          toggleReadingMode();
+          return;
+        }
+      }
+
       if ((e.key === "Delete" || e.key === "Backspace") && selectedAnnotationIds.length > 0 && activeDoc) {
         e.preventDefault();
         deleteSelectedAnnotation();
@@ -2666,44 +2947,46 @@
 <svelte:window on:keydown|capture={handleKeyDown} />
 
 <div class="flex flex-1 flex-col h-full overflow-hidden">
-  <!-- Adobe Acrobat Style Top Tab Bar -->
-  <div class="flex items-center gap-1 border-b border-zinc-200 bg-zinc-200/70 px-2 pt-1.5 dark:border-zinc-800 dark:bg-zinc-900/90 shrink-0">
-    <div class="flex flex-1 items-center gap-1 overflow-x-auto no-scrollbar">
-      {#each $openDocs as d (d.id)}
-        <div
-          class="group flex max-w-[200px] items-center gap-1.5 rounded-t-lg border-t border-x px-3 py-1.5 text-xs font-medium transition-all cursor-pointer select-none
-            {$activeDocId === d.id
-              ? 'border-zinc-300 bg-white text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100'
-              : 'border-transparent bg-transparent text-zinc-500 hover:bg-zinc-300/50 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/50'}"
-          on:click={() => activeDocId.set(d.id)}
-          role="button"
-          tabindex="0"
-          on:keydown={(e) => e.key === "Enter" && activeDocId.set(d.id)}
-        >
-          <FileText size={13} class={$activeDocId === d.id ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"} />
-          <span class="truncate">{d.name}</span>
-          {#if d.hasUnsavedChanges}
-            <span class="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" title="Kaydedilmemiş değişiklikler var"></span>
-          {/if}
-          <button
-            class="rounded p-0.5 opacity-60 hover:bg-zinc-200 hover:opacity-100 dark:hover:bg-zinc-700"
-            title="Sekmeyi Kapat"
-            on:click={(e) => handleCloseTab(d.id, e)}
+  {#if !isReadingMode}
+    <!-- Adobe Acrobat Style Top Tab Bar -->
+    <div class="flex items-center gap-1 border-b border-zinc-200 bg-zinc-200/70 px-2 pt-1.5 dark:border-zinc-800 dark:bg-zinc-900/90 shrink-0">
+      <div class="flex flex-1 items-center gap-1 overflow-x-auto no-scrollbar">
+        {#each $openDocs as d (d.id)}
+          <div
+            class="group flex max-w-[200px] items-center gap-1.5 rounded-t-lg border-t border-x px-3 py-1.5 text-xs font-medium transition-all cursor-pointer select-none
+              {$activeDocId === d.id
+                ? 'border-zinc-300 bg-white text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100'
+                : 'border-transparent bg-transparent text-zinc-500 hover:bg-zinc-300/50 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/50'}"
+            on:click={() => activeDocId.set(d.id)}
+            role="button"
+            tabindex="0"
+            on:keydown={(e) => e.key === "Enter" && activeDocId.set(d.id)}
           >
-            <X size={12} />
-          </button>
-        </div>
-      {/each}
-    </div>
+            <FileText size={13} class={$activeDocId === d.id ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"} />
+            <span class="truncate">{d.name}</span>
+            {#if d.hasUnsavedChanges}
+              <span class="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" title="Kaydedilmemiş değişiklikler var"></span>
+            {/if}
+            <button
+              class="rounded p-0.5 opacity-60 hover:bg-zinc-200 hover:opacity-100 dark:hover:bg-zinc-700"
+              title="Sekmeyi Kapat"
+              on:click={(e) => handleCloseTab(d.id, e)}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        {/each}
+      </div>
 
-    <button
-      class="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-600 hover:bg-zinc-300/60 dark:text-zinc-400 dark:hover:bg-zinc-800"
-      title="Yeni PDF Aç"
-      on:click={openNewFileDialog}
-    >
-      <Plus size={14} /> Yeni PDF Aç
-    </button>
-  </div>
+      <button
+        class="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-zinc-600 hover:bg-zinc-300/60 dark:text-zinc-400 dark:hover:bg-zinc-800"
+        title="Yeni PDF Aç"
+        on:click={openNewFileDialog}
+      >
+        <Plus size={14} /> Yeni PDF Aç
+      </button>
+    </div>
+  {/if}
 
   {#if !activeDoc}
     <!-- Empty state when no PDF is loaded -->
@@ -2713,8 +2996,9 @@
       </div>
     </div>
   {:else}
-    <!-- Compact Professional Toolbar (Directly under tabs, NO giant title section) -->
-    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-white px-3 py-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 shrink-0">
+    {#if !isReadingMode}
+      <!-- Compact Professional Toolbar (Directly under tabs, NO giant title section) -->
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-white px-3 py-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 shrink-0">
       <div class="flex items-center gap-1">
         <!-- Toggle sidebar button -->
         <button
@@ -2754,14 +3038,66 @@
           <PenLine size={14} /> Kalem
         </button>
 
-        <!-- VURGULA -->
-        <button
-          class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-all {currentTool === 'highlighter' ? 'bg-indigo-600 text-white shadow' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
-          title="Fosforlu Vurgulayıcı"
-          on:click={() => (currentTool = "highlighter")}
-        >
-          <Highlighter size={14} /> Vurgula
-        </button>
+        <!-- VURGULA SPLIT DROPDOWN -->
+        <div id="highlighter-dropdown-container" class="relative inline-flex items-center">
+          <button
+            class="flex items-center gap-1 rounded-l-lg px-2 py-1 text-xs font-medium transition-all {currentTool === 'highlighter' ? 'bg-indigo-600 text-white shadow' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
+            title={selectedText ? "Seçili metni sarı ile vurgula" : "Fosforlu Vurgulayıcı"}
+            on:click={() => {
+              if (selectedText) {
+                applyTextAction("highlight");
+              } else {
+                currentTool = "highlighter";
+              }
+            }}
+          >
+            <Highlighter size={14} /> Vurgula
+          </button>
+          <button
+            class="flex items-center justify-center rounded-r-lg px-1 py-1 text-xs font-medium border-l border-zinc-200 dark:border-zinc-700 transition-all {currentTool === 'highlighter' ? 'bg-indigo-600 text-white shadow' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
+            title="Vurgulama ve Metin Biçimlendirme Seçenekleri"
+            on:click|stopPropagation={() => (showHighlighterMenu = !showHighlighterMenu)}
+          >
+            <ChevronDown size={11} class="transition-transform {showHighlighterMenu ? 'rotate-180' : ''}" />
+          </button>
+
+          {#if showHighlighterMenu}
+            <div
+              class="absolute left-0 top-full mt-1.5 w-48 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-1.5 shadow-xl z-50 text-xs"
+            >
+              <button
+                class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700 {currentTool === 'highlighter' ? 'font-semibold text-indigo-600 dark:text-indigo-400' : ''}"
+                on:click={() => { currentTool = 'highlighter'; showHighlighterMenu = false; }}
+              >
+                <Highlighter size={14} />
+                <span>Fosforlu Kalem</span>
+              </button>
+              <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1"></div>
+              <div class="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase px-2 py-0.5">Seçili Metin İçin</div>
+              <button
+                class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                on:click={() => { applyTextAction('highlight'); showHighlighterMenu = false; }}
+              >
+                <Highlighter size={14} class="text-amber-500" />
+                <span>Metni Vurgula</span>
+              </button>
+              <button
+                class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                on:click={() => { applyTextAction('underline'); showHighlighterMenu = false; }}
+              >
+                <Underline size={14} class="text-rose-500" />
+                <span>Altını Çiz</span>
+              </button>
+              <button
+                class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                on:click={() => { applyTextAction('strikethrough'); showHighlighterMenu = false; }}
+              >
+                <Strikethrough size={14} class="text-zinc-500" />
+                <span>Üstünü Çiz</span>
+              </button>
+            </div>
+          {/if}
+        </div>
 
         <!-- SİLGİ DROPDOWN -->
         <div id="eraser-dropdown-container" class="relative inline-flex items-center">
@@ -3165,22 +3501,85 @@
         <div class="h-4 w-px bg-zinc-200 dark:bg-zinc-800"></div>
 
         <!-- Yakınlaştırma (Zoom) Grubu -->
-        <div class="flex items-center gap-0.5">
+        <div id="zoom-dropdown-container" class="relative flex items-center gap-0.5">
           <button class="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Uzaklaştır (Ctrl+-)" on:click={() => changeZoom(-0.2)}>
             <ZoomOut size={15} />
           </button>
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-xs text-zinc-600 hover:text-indigo-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-zinc-800 w-12 text-center font-mono cursor-pointer transition-colors active:scale-95"
-            title="Yakınlaştırmayı Sıfırla (%100 - Ctrl+0)"
-            on:click={resetZoom}
+            class="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-zinc-600 hover:text-indigo-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-zinc-800 font-mono cursor-pointer transition-colors active:scale-95"
+            title="Yakınlaştırma ve Sığdırma Seçenekleri"
+            on:click|stopPropagation={() => (showZoomMenu = !showZoomMenu)}
           >
-            %{Math.round(activeDoc.scale * 100)}
+            <span>%{Math.round(activeDoc.scale * 100)}</span>
+            <ChevronDown size={10} class="text-zinc-400" />
           </button>
           <button class="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Yakınlaştır (Ctrl++)" on:click={() => changeZoom(0.2)}>
             <ZoomIn size={15} />
           </button>
+
+          {#if showZoomMenu}
+            <div
+              class="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 w-44 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-1.5 shadow-xl z-50 text-xs"
+            >
+              <div class="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase px-2 py-1">Sığdırma</div>
+              <button
+                class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                on:click={fitToWidth}
+              >
+                <span>Genişliğe Sığdır</span>
+              </button>
+              <button
+                class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                on:click={fitToPage}
+              >
+                <span>Sayfaya Sığdır</span>
+              </button>
+              <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1"></div>
+              <div class="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase px-2 py-1">Ön Ayarlar</div>
+              {#each [0.5, 0.75, 1.0, 1.25, 1.5, 2.0] as preset}
+                <button
+                  class="flex w-full items-center justify-between rounded-lg px-2 py-1 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-700 {Math.abs(activeDoc.scale - preset) < 0.05 ? 'font-bold text-indigo-600 dark:text-indigo-400' : ''}"
+                  on:click={() => setZoomPreset(preset)}
+                >
+                  <span>%{Math.round(preset * 100)}</span>
+                  {#if Math.abs(activeDoc.scale - preset) < 0.05}
+                    <Check size={12} />
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
         </div>
+
+        <div class="h-4 w-px bg-zinc-200 dark:bg-zinc-800"></div>
+
+        <!-- Görünüm Modu: Tek Sayfa / Sürekli Kaydırma -->
+        <button
+          class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-all {viewLayout === 'continuous' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 font-semibold' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
+          title={viewLayout === 'continuous' ? 'Tek Sayfa Görünümüne Geç' : 'Sürekli Kaydırma Görünümüne Geç'}
+          on:click={() => {
+            viewLayout = viewLayout === 'single' ? 'continuous' : 'single';
+            if (viewLayout === 'single') {
+              tick().then(renderCurrentPage);
+            } else {
+              visiblePageRange = { start: Math.max(1, activeDoc.currentPage - 2), end: Math.min(activeDoc.pageCount, activeDoc.currentPage + 2) };
+              tick().then(() => document.getElementById(`continuous-page-${activeDoc.currentPage}`)?.scrollIntoView());
+            }
+          }}
+        >
+          <Layers size={14} />
+          <span>{viewLayout === 'continuous' ? 'Sürekli' : 'Tek Sayfa'}</span>
+        </button>
+
+        <!-- Okuma Modu / Tam Ekran (F11) -->
+        <button
+          class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-all"
+          title="Okuma Modu / Tam Ekran (F11)"
+          on:click={toggleReadingMode}
+        >
+          <Maximize size={14} />
+        </button>
 
         <div class="h-4 w-px bg-zinc-200 dark:bg-zinc-800"></div>
 
@@ -3262,11 +3661,12 @@
         </div>
       </div>
     </div>
+    {/if}
 
     <!-- Main Workspace with Collapsible Sidebar -->
     <div class="flex flex-1 min-h-0 overflow-hidden">
       <!-- Collapsible & Resizable Thumbnail Sidebar -->
-      {#if showSidebar}
+      {#if showSidebar && !isReadingMode}
         <div
           class="relative flex shrink-0 flex-col gap-1.5 overflow-y-auto border-r border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-800 dark:bg-zinc-900/60 select-none transition-[width] duration-75"
           style="width: {sidebarWidth}px;"
@@ -3337,7 +3737,8 @@
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div
         bind:this={canvasContainer}
-        on:wheel={handleContainerWheel}
+        on:wheel={viewLayout === 'single' ? handleContainerWheel : undefined}
+        on:scroll={handleContinuousScroll}
         on:mousedown={handleContainerMouseDown}
         on:auxclick={(e) => { if (e.button === 1) e.preventDefault(); }}
         style={isMiddlePanning ? "cursor: grabbing !important; user-select: none;" : ""}
@@ -3371,132 +3772,253 @@
           </div>
         {/if}
 
-        <div class="min-w-fit min-h-fit flex flex-col items-center justify-center m-auto">
-          <!-- Page Header Strip / Distinction -->
-          <div class="w-full flex items-center justify-between pb-2 px-1 text-xs select-none">
-            <div class="flex items-center gap-2">
-              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-semibold shadow-xs border border-zinc-200/80 dark:border-zinc-700/80">
-                <FileText size={12} class="text-indigo-600 dark:text-indigo-400" />
-                Sayfa {activeDoc.currentPage} / {activeDoc.pageCount}
-              </span>
-              {#if activeDoc.currentPage > 1}
+        {#if viewLayout === "continuous" && activeDoc}
+          <div class="flex flex-col items-center py-4">
+            {#each Array.from({ length: activeDoc.pageCount }, (_, i) => i + 1) as p (p)}
+              <ContinuousPage
+                page={p}
+                handle={activeDoc.handle}
+                scale={activeDoc.scale}
+                isVisible={p >= visiblePageRange.start && p <= visiblePageRange.end}
+                isCurrentPage={p === activeDoc.currentPage}
+                annotations={activeDoc.annotations[p] || []}
+                onSelectPage={(selectedP) => {
+                  if (activeDoc && selectedP !== activeDoc.currentPage) {
+                    updateDocPage(activeDoc.id, selectedP);
+                  }
+                }}
+                onLinkClick={handleLinkClick}
+              />
+            {/each}
+          </div>
+        {:else if activeDoc}
+          <div class="min-w-fit min-h-fit flex flex-col items-center justify-center m-auto">
+            <!-- Page Header Strip / Distinction -->
+            <div class="w-full flex items-center justify-between pb-2 px-1 text-xs select-none">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-semibold shadow-xs border border-zinc-200/80 dark:border-zinc-700/80">
+                  <FileText size={12} class="text-indigo-600 dark:text-indigo-400" />
+                  Sayfa {activeDoc.currentPage} / {activeDoc.pageCount}
+                </span>
+                {#if activeDoc.currentPage > 1}
+                  <span class="text-[11px] text-zinc-400 dark:text-zinc-500 hidden sm:inline">
+                    ↑ Önceki: Sayfa {activeDoc.currentPage - 1}
+                  </span>
+                {/if}
+              </div>
+              {#if activeDoc.currentPage < activeDoc.pageCount}
                 <span class="text-[11px] text-zinc-400 dark:text-zinc-500 hidden sm:inline">
-                  ↑ Önceki: Sayfa {activeDoc.currentPage - 1}
+                  ↓ Sonraki: Sayfa {activeDoc.currentPage + 1}
                 </span>
               {/if}
             </div>
-            {#if activeDoc.currentPage < activeDoc.pageCount}
-              <span class="text-[11px] text-zinc-400 dark:text-zinc-500 hidden sm:inline">
-                ↓ Sonraki: Sayfa {activeDoc.currentPage + 1}
-              </span>
-            {/if}
-          </div>
 
-          <div class="relative shadow-2xl rounded transition-all duration-200 ease-out {pageTransitionClass}">
-          <canvas bind:this={pdfCanvas} class="block rounded bg-white"></canvas>
-
-          <canvas
-            bind:this={overlayCanvas}
-            style="cursor: {canvasCursor};"
-            class="absolute inset-0 touch-none"
-            on:mousedown={onMouseDown}
-            on:mousemove={onMouseMove}
-            on:mouseup={onMouseUp}
-            on:mouseenter={() => (isMouseOverCanvas = true)}
-            on:mouseleave={onMouseLeave}
-          ></canvas>
-
-          <!-- Circular Eraser Cursor Preview: Active only for Hassas and Daksil -->
-          {#if currentTool === "eraser" && (eraserMode === "precision" || eraserMode === "whiteout") && isMouseOverCanvas && eraserClientPos}
             <div
-              class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 {eraserMode === 'whiteout' ? 'border-amber-500 bg-white/40' : 'border-indigo-600 bg-indigo-500/20'} shadow-xs flex items-center justify-center z-20"
-              style="left: {eraserClientPos.x}px; top: {eraserClientPos.y}px; width: {eraserDisplayDiameter}px; height: {eraserDisplayDiameter}px;"
+              class="relative shadow-2xl rounded transition-all duration-200 ease-out {pageTransitionClass}"
+              on:mousemove={handleWrapperMouseMove}
             >
-              <div class="h-1 w-1 rounded-full {eraserMode === 'whiteout' ? 'bg-amber-500' : 'bg-indigo-600'}"></div>
-            </div>
-          {/if}
+              <canvas bind:this={pdfCanvas} class="block rounded bg-white"></canvas>
 
-          <!-- Floating Inline Text Input: Uses exact CSS coordinates & reliable keyboard / button confirm -->
-          {#if textInputVisible}
-            <div
-              class="absolute z-30 flex items-center gap-1 rounded-xl border-2 border-purple-500 p-1.5 shadow-xl backdrop-blur-md"
-              style="left: {textInputCssX}px; top: {textInputCssY}px; background-color: rgba(255, 255, 255, 0.85);"
-            >
-              <input
-                bind:this={textInputRef}
-                bind:value={textInputVal}
-                placeholder="Metin yazın..."
-                class="rounded border-none bg-transparent px-2 py-0.5 font-medium outline-none text-zinc-900"
-                style="font-size: {currentFontSize}px; color: {currentColor}; font-family: sans-serif;"
-                on:keydown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    commitTextInput();
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    textInputVisible = false;
-                    textInputVal = "";
-                  }
-                }}
-              />
-              <button
-                class="rounded-lg p-1 text-emerald-600 hover:bg-emerald-100/60"
-                title="Onayla (Enter)"
-                on:mousedown|stopPropagation|preventDefault
-                on:click|stopPropagation={commitTextInput}
-              >
-                <Check size={16} />
-              </button>
-              <button
-                class="rounded-lg p-1 text-rose-500 hover:bg-rose-100/60"
-                title="İptal (Esc)"
-                on:mousedown|stopPropagation|preventDefault
-                on:click|stopPropagation={() => { textInputVisible = false; textInputVal = ""; }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-          {/if}
-        </div>
+              <!-- Text Layer (Transparent Selectable Text) -->
+              <div bind:this={textLayerDiv} class="textLayer absolute inset-0 select-text"></div>
 
-        <!-- Page Footer Strip / Boundary Separator -->
-        <div class="w-full flex items-center justify-center pt-3 mt-1 text-[11px] select-none text-zinc-400 dark:text-zinc-500">
-          <div class="flex items-center gap-2">
-            <div class="h-px w-10 bg-zinc-300 dark:bg-zinc-700"></div>
-            <span>Sayfa {activeDoc.currentPage} Sonu</span>
-            {#if activeDoc.currentPage < activeDoc.pageCount}
-              <span class="text-zinc-500 dark:text-zinc-400 font-medium">(Aşağı kaydırarak veya nesneyi alta sürükleyerek s. {activeDoc.currentPage + 1}'e geçin)</span>
-            {:else}
-              <span class="text-emerald-600 dark:text-emerald-400 font-medium">✓ Belge Sonu</span>
-            {/if}
-            <div class="h-px w-10 bg-zinc-300 dark:bg-zinc-700"></div>
+              <!-- Clickable Hyperlinks -->
+              <div class="absolute inset-0 pointer-events-none">
+                {#each currentLinks as link}
+                  <button
+                    type="button"
+                    class="absolute pointer-events-auto cursor-pointer rounded-xs bg-indigo-500/10 hover:bg-indigo-500/25 transition-colors border border-transparent hover:border-indigo-500/40"
+                    style="left: {link.rect[0]}px; top: {link.rect[1]}px; width: {link.rect[2] - link.rect[0]}px; height: {link.rect[3] - link.rect[1]}px;"
+                    title={link.url ? link.url : link.destPage ? `Sayfa ${link.destPage}'e git` : 'Bağlantı'}
+                    on:click={(e) => handleLinkClick(link, e)}
+                  ></button>
+                {/each}
+              </div>
+
+              <canvas
+                bind:this={overlayCanvas}
+                style="cursor: {canvasCursor}; pointer-events: {overlayPointerEvents};"
+                class="absolute inset-0 touch-none"
+                on:mousedown={onMouseDown}
+                on:mousemove={onMouseMove}
+                on:mouseup={onMouseUp}
+                on:mouseenter={() => (isMouseOverCanvas = true)}
+                on:mouseleave={onMouseLeave}
+              ></canvas>
+
+              <!-- Circular Eraser Cursor Preview: Active only for Hassas and Daksil -->
+              {#if currentTool === "eraser" && (eraserMode === "precision" || eraserMode === "whiteout") && isMouseOverCanvas && eraserClientPos}
+                <div
+                  class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 {eraserMode === 'whiteout' ? 'border-amber-500 bg-white/40' : 'border-indigo-600 bg-indigo-500/20'} shadow-xs flex items-center justify-center z-20"
+                  style="left: {eraserClientPos.x}px; top: {eraserClientPos.y}px; width: {eraserDisplayDiameter}px; height: {eraserDisplayDiameter}px;"
+                >
+                  <div class="h-1 w-1 rounded-full {eraserMode === 'whiteout' ? 'bg-amber-500' : 'bg-indigo-600'}"></div>
+                </div>
+              {/if}
+
+              <!-- Floating Inline Text Input: Uses exact CSS coordinates & reliable keyboard / button confirm -->
+              {#if textInputVisible}
+                <div
+                  class="absolute z-30 flex items-center gap-1 rounded-xl border-2 border-purple-500 p-1.5 shadow-xl backdrop-blur-md"
+                  style="left: {textInputCssX}px; top: {textInputCssY}px; background-color: rgba(255, 255, 255, 0.85);"
+                >
+                  <input
+                    bind:this={textInputRef}
+                    bind:value={textInputVal}
+                    placeholder="Metin yazın..."
+                    class="rounded border-none bg-transparent px-2 py-0.5 font-medium outline-none text-zinc-900"
+                    style="font-size: {currentFontSize}px; color: {currentColor}; font-family: sans-serif;"
+                    on:keydown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitTextInput();
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        textInputVisible = false;
+                        textInputVal = "";
+                      }
+                    }}
+                  />
+                  <button
+                    class="rounded-lg p-1 text-emerald-600 hover:bg-emerald-100/60"
+                    title="Onayla (Enter)"
+                    on:mousedown|stopPropagation|preventDefault
+                    on:click|stopPropagation={commitTextInput}
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    class="rounded-lg p-1 text-rose-500 hover:bg-rose-100/60"
+                    title="İptal (Esc)"
+                    on:mousedown|stopPropagation|preventDefault
+                    on:click|stopPropagation={() => { textInputVisible = false; textInputVal = ""; }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Page Footer Strip / Boundary Separator -->
+            <div class="w-full flex items-center justify-center pt-3 mt-1 text-[11px] select-none text-zinc-400 dark:text-zinc-500">
+              <div class="flex items-center gap-2">
+                <div class="h-px w-10 bg-zinc-300 dark:bg-zinc-700"></div>
+                <span>Sayfa {activeDoc.currentPage} Sonu</span>
+                {#if activeDoc.currentPage < activeDoc.pageCount}
+                  <span class="text-zinc-500 dark:text-zinc-400 font-medium">(Aşağı kaydırarak veya nesneyi alta sürükleyerek s. {activeDoc.currentPage + 1}'e geçin)</span>
+                {:else}
+                  <span class="text-emerald-600 dark:text-emerald-400 font-medium">✓ Belge Sonu</span>
+                {/if}
+                <div class="h-px w-10 bg-zinc-300 dark:bg-zinc-700"></div>
+              </div>
+            </div>
           </div>
-        </div>
-        </div>
+        {/if}
       </div>
+
+      <!-- Floating Selection Action Bar for Selected Text -->
+      {#if selectedText && selectedTextRect}
+        <div
+          class="fixed z-50 flex items-center gap-1 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white/95 dark:bg-zinc-900/95 p-1 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 text-xs"
+          style="left: {selectedTextRect.left}px; top: {Math.max(10, selectedTextRect.top - 40)}px; transform: translateX(-50%);"
+        >
+          <button
+            class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-amber-50 text-amber-600 dark:hover:bg-amber-950/40 font-medium transition-colors"
+            title="Seçili metni vurgula"
+            on:click={() => applyTextAction("highlight")}
+          >
+            <Highlighter size={13} />
+            <span>Vurgula</span>
+          </button>
+          <button
+            class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-rose-50 text-rose-600 dark:hover:bg-rose-950/40 font-medium transition-colors"
+            title="Seçili metnin altını çiz"
+            on:click={() => applyTextAction("underline")}
+          >
+            <Underline size={13} />
+            <span>Altını Çiz</span>
+          </button>
+          <button
+            class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-zinc-100 text-zinc-700 dark:hover:bg-zinc-800 dark:text-zinc-200 font-medium transition-colors"
+            title="Seçili metnin üstünü çiz"
+            on:click={() => applyTextAction("strikethrough")}
+          >
+            <Strikethrough size={13} />
+            <span>Üstünü Çiz</span>
+          </button>
+          <div class="h-3.5 w-px bg-zinc-200 dark:bg-zinc-700"></div>
+          <button
+            class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-zinc-100 text-zinc-600 dark:hover:bg-zinc-800 dark:text-zinc-300 font-medium transition-colors"
+            title="Panoya kopyala (Ctrl+C)"
+            on:click={copySelectedText}
+          >
+            <Copy size={13} />
+            <span>Kopyala</span>
+          </button>
+        </div>
+      {/if}
+
+      <!-- Floating Reading Mode Header Bar -->
+      {#if isReadingMode && activeDoc}
+        <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 rounded-2xl bg-zinc-900/90 text-white shadow-2xl backdrop-blur-md border border-white/10 text-xs">
+          <button
+            class="flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-white/10 disabled:opacity-30"
+            disabled={activeDoc.currentPage <= 1}
+            on:click={() => setPage(activeDoc.currentPage - 1)}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span class="font-medium">Sayfa {activeDoc.currentPage} / {activeDoc.pageCount}</span>
+          <button
+            class="flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-white/10 disabled:opacity-30"
+            disabled={activeDoc.currentPage >= activeDoc.pageCount}
+            on:click={() => setPage(activeDoc.currentPage + 1)}
+          >
+            <ChevronRight size={16} />
+          </button>
+          <div class="h-4 w-px bg-white/20"></div>
+          <button class="p-1 hover:bg-white/10 rounded" title="Uzaklaştır" on:click={() => changeZoom(-0.2)}>
+            <ZoomOut size={15} />
+          </button>
+          <span class="font-mono text-[11px]">%{Math.round(activeDoc.scale * 100)}</span>
+          <button class="p-1 hover:bg-white/10 rounded" title="Yakınlaştır" on:click={() => changeZoom(0.2)}>
+            <ZoomIn size={15} />
+          </button>
+          <div class="h-4 w-px bg-white/20"></div>
+          <button
+            class="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 px-2.5 py-1 font-semibold transition-colors"
+            on:click={toggleReadingMode}
+            title="Okuma modundan çık (Esc)"
+          >
+            <X size={14} /> Çıkış (Esc)
+          </button>
+        </div>
+      {/if}
     </div>
 
-    <!-- Bottom Page Navigation Bar -->
-    <div class="flex items-center justify-center gap-4 border-t border-zinc-200 bg-white px-4 py-1.5 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 shrink-0">
-      <button
-        class="flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-zinc-800"
-        disabled={activeDoc.currentPage <= 1}
-        on:click={() => setPage(activeDoc.currentPage - 1)}
-      >
-        <ChevronLeft size={16} /> Önceki
-      </button>
+    {#if !isReadingMode}
+      <!-- Bottom Page Navigation Bar -->
+      <div class="flex items-center justify-center gap-4 border-t border-zinc-200 bg-white px-4 py-1.5 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 shrink-0">
+        <button
+          class="flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-zinc-800"
+          disabled={activeDoc.currentPage <= 1}
+          on:click={() => setPage(activeDoc.currentPage - 1)}
+        >
+          <ChevronLeft size={16} /> Önceki
+        </button>
 
-      <span class="font-medium">Sayfa {activeDoc.currentPage} / {activeDoc.pageCount}</span>
+        <span class="font-medium">Sayfa {activeDoc.currentPage} / {activeDoc.pageCount}</span>
 
-      <button
-        class="flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-zinc-800"
-        disabled={activeDoc.currentPage >= activeDoc.pageCount}
-        on:click={() => setPage(activeDoc.currentPage + 1)}
-      >
-        Sonraki <ChevronRight size={16} />
-      </button>
-    </div>
+        <button
+          class="flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-zinc-100 disabled:opacity-30 dark:hover:bg-zinc-800"
+          disabled={activeDoc.currentPage >= activeDoc.pageCount}
+          on:click={() => setPage(activeDoc.currentPage + 1)}
+        >
+          Sonraki <ChevronRight size={16} />
+        </button>
+      </div>
+    {/if}
   {/if}
 </div>
 

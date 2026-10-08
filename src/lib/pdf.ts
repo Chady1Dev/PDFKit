@@ -12,11 +12,20 @@ export interface TextItemData {
   height: number;
 }
 
+export interface PdfLink {
+  rect: [number, number, number, number];
+  url?: string;
+  destPage?: number;
+}
+
 /** Handle around an open pdf.js document. Always `destroy()` when done. */
 export interface PdfDocHandle {
   path: string;
   pageCount: number;
   renderPage(page: number, scale: number): Promise<HTMLCanvasElement>;
+  getPageDimensions(page: number): Promise<{ width: number; height: number }>;
+  renderTextLayer(page: number, scale: number, container: HTMLElement): Promise<void>;
+  getPageLinks(page: number, scale: number): Promise<PdfLink[]>;
   getPageText(page: number): Promise<string>;
   getPageTextItems(page: number): Promise<TextItemData[]>;
   destroy(): Promise<void>;
@@ -49,6 +58,71 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
       await pdfPage.render({ canvasContext: ctx, viewport }).promise;
       pdfPage.cleanup();
       return canvas;
+    },
+
+    async getPageDimensions(page: number): Promise<{ width: number; height: number }> {
+      if (destroyed) throw new Error("document closed");
+      const pdfPage = await doc.getPage(page);
+      const viewport = pdfPage.getViewport({ scale: 1.0 });
+      const dims = { width: viewport.width, height: viewport.height };
+      pdfPage.cleanup();
+      return dims;
+    },
+
+    async renderTextLayer(page: number, scale: number, container: HTMLElement): Promise<void> {
+      if (destroyed) throw new Error("document closed");
+      container.innerHTML = "";
+      const pdfPage = await doc.getPage(page);
+      const viewport = pdfPage.getViewport({ scale });
+      const textContent = await pdfPage.getTextContent();
+      const textLayer = new (pdfjs as any).TextLayer({
+        textContentSource: textContent,
+        container,
+        viewport,
+      });
+      await textLayer.render();
+      pdfPage.cleanup();
+    },
+
+    async getPageLinks(page: number, scale: number): Promise<PdfLink[]> {
+      if (destroyed) throw new Error("document closed");
+      const pdfPage = await doc.getPage(page);
+      const viewport = pdfPage.getViewport({ scale });
+      const annotations = await pdfPage.getAnnotations();
+      const links: PdfLink[] = [];
+      for (const ann of annotations) {
+        if (ann.subtype === "Link") {
+          let destPage: number | undefined;
+          if (ann.dest) {
+            try {
+              if (typeof ann.dest === "string") {
+                const destArr = await doc.getDestination(ann.dest);
+                if (destArr && destArr[0]) {
+                  const pageIdx = await doc.getPageIndex(destArr[0]);
+                  destPage = pageIdx + 1;
+                }
+              } else if (Array.isArray(ann.dest) && ann.dest[0]) {
+                const pageIdx = await doc.getPageIndex(ann.dest[0]);
+                destPage = pageIdx + 1;
+              }
+            } catch {}
+          }
+          if (ann.rect && ann.rect.length === 4) {
+            const viewRect = viewport.convertToViewportRectangle(ann.rect);
+            const x1 = Math.min(viewRect[0], viewRect[2]);
+            const y1 = Math.min(viewRect[1], viewRect[3]);
+            const x2 = Math.max(viewRect[0], viewRect[2]);
+            const y2 = Math.max(viewRect[1], viewRect[3]);
+            links.push({
+              rect: [x1, y1, x2, y2],
+              url: ann.url,
+              destPage,
+            });
+          }
+        }
+      }
+      pdfPage.cleanup();
+      return links;
     },
 
     async getPageText(page: number): Promise<string> {
