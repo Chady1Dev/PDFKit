@@ -10,3 +10,5 @@ pub mod printer;
 pub mod rotate;
 pub mod security;
 pub mod split;
+pub mod ocr;
+

@@ -32,6 +32,8 @@
   let busy = false;
   let result: CompressResult | null = null;
 
+  let level: "lossless" | "balanced" | "maximum" = "balanced";
+
   $: if ($pendingFiles && $pendingFiles.targetView === "compress") {
     const p = $pendingFiles.paths.filter((x) => x.toLowerCase().endsWith(".pdf"));
     if (p.length > 0) {
@@ -78,7 +80,7 @@
     busy = true;
     result = null;
     try {
-      result = await compressPdf(input, output);
+      result = await compressPdf(input, output, level);
       if (result.already_optimized) {
         pushToast(
           "Bu belge zaten maksimum düzeyde optimize edilmiş. Orijinal dosya boyutu korundu.",
@@ -101,6 +103,7 @@
       busy = false;
     }
   }
+
 </script>
 
 <ToolHeader
@@ -179,7 +182,76 @@
     </div>
   </div>
 
+  {#if !result}
+    <!-- Sıkıştırma Seviyesi Seçimi -->
+    <div class="mt-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 transition-all">
+      <div class="mb-3 flex items-center justify-between">
+        <div>
+          <h4 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">Sıkıştırma Seviyesi</h4>
+          <p class="text-xs text-zinc-500 dark:text-zinc-400">İhtiyacınıza en uygun kalite ve dosya boyutu dengesini belirleyin</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <!-- Kayıpsız -->
+        <button
+          type="button"
+          class="flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer {level === 'lossless' ? 'border-indigo-600 bg-indigo-50/60 dark:border-indigo-500 dark:bg-indigo-950/30' : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'}"
+          on:click={() => (level = "lossless")}
+        >
+          <div class="flex items-center justify-between w-full mb-1.5">
+            <span class="text-xs font-bold text-zinc-900 dark:text-zinc-100">Kayıpsız</span>
+            {#if level === 'lossless'}
+              <span class="h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400"></span>
+            {/if}
+          </div>
+          <span class="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+            Meta veri temizleme ve akış optimizasyonu. Görsellerde sıfır kalite kaybı.
+          </span>
+        </button>
+
+        <!-- Dengeli (Önerilen) -->
+        <button
+          type="button"
+          class="flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer relative {level === 'balanced' ? 'border-indigo-600 bg-indigo-50/60 dark:border-indigo-500 dark:bg-indigo-950/30' : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'}"
+          on:click={() => (level = "balanced")}
+        >
+          <div class="flex items-center justify-between w-full mb-1.5">
+            <span class="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+              Dengeli
+              <span class="rounded bg-indigo-100 px-1.5 py-0.2 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">Önerilen</span>
+            </span>
+            {#if level === 'balanced'}
+              <span class="h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400"></span>
+            {/if}
+          </div>
+          <span class="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+            Ekran ve e-posta için ideal. Görseller yüksek kalitede yeniden örneklendirilir.
+          </span>
+        </button>
+
+        <!-- Yüksek Sıkıştırma -->
+        <button
+          type="button"
+          class="flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer {level === 'maximum' ? 'border-indigo-600 bg-indigo-50/60 dark:border-indigo-500 dark:bg-indigo-950/30' : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700'}"
+          on:click={() => (level = "maximum")}
+        >
+          <div class="flex items-center justify-between w-full mb-1.5">
+            <span class="text-xs font-bold text-zinc-900 dark:text-zinc-100">Yüksek</span>
+            {#if level === 'maximum'}
+              <span class="h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400"></span>
+            {/if}
+          </div>
+          <span class="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+            Maksimum boyut tasarrufu. Büyük belgeler, arşiv ve web yüklemeleri için en iyisi.
+          </span>
+        </button>
+      </div>
+    </div>
+  {/if}
+
   <!-- Sıkıştırma Sonrası: Önce - Sonra Kazanç Ekranı VEYA Güvenlik Koruması -->
+
   {#if result}
     {#if result.already_optimized}
       <!-- Güvenlik Koruması: Zaten Optimize Edilmiş Belge -->

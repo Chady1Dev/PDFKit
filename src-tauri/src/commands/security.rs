@@ -1,26 +1,56 @@
 use crate::error::PdfError;
 use crate::types::OpResult;
-use lopdf::encryption::crypt_filters::{Aes128CryptFilter, CryptFilter};
+use lopdf::encryption::crypt_filters::{Aes128CryptFilter, Aes256CryptFilter, CryptFilter};
 use lopdf::encryption::{EncryptionState, EncryptionVersion, Permissions};
 use lopdf::{Document, Object};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-/// Encrypts a PDF with AES-128 (PDF 1.5 / V4 standard security handler).
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EncryptionPermissions {
+    #[serde(default = "default_true")]
+    pub allow_print: bool,
+    #[serde(default = "default_true")]
+    pub allow_copy: bool,
+    #[serde(default = "default_true")]
+    pub allow_modify: bool,
+    #[serde(default = "default_true")]
+    pub allow_annotate: bool,
+}
+
+impl Default for EncryptionPermissions {
+    fn default() -> Self {
+        Self {
+            allow_print: true,
+            allow_copy: true,
+            allow_modify: true,
+            allow_annotate: true,
+        }
+    }
+}
+
+/// Encrypts a PDF with AES-256 (default, V5 / PDF 2.0 / ISO 32000-2) or AES-128 (V4).
 ///
 /// - `user_password`: required to open the document (may be empty to only
 ///   restrict permissions).
 /// - `owner_password`: required to change permissions; falls back to the
 ///   user password when empty.
-/// - All standard permissions are granted; restriction flags can be added
-///   later without touching the crypto path.
+/// - `permissions`: granular permission flags (printing, copying, modification, annotations).
+/// - `algorithm`: "aes256" (default) or "aes128".
 #[tauri::command]
 pub async fn encrypt_pdf(
     input: String,
     output: String,
     user_password: String,
     owner_password: String,
+    permissions: Option<EncryptionPermissions>,
+    algorithm: Option<String>,
 ) -> Result<OpResult, PdfError> {
     tauri::async_runtime::spawn_blocking(move || {
         encrypt_document(
@@ -28,6 +58,8 @@ pub async fn encrypt_pdf(
             Path::new(&output),
             &user_password,
             &owner_password,
+            permissions.unwrap_or_default(),
+            algorithm.as_deref().unwrap_or("aes256"),
         )
     })
     .await
@@ -73,6 +105,8 @@ fn encrypt_document(
     output: &Path,
     user_password: &str,
     owner_password: &str,
+    permissions: EncryptionPermissions,
+    algorithm: &str,
 ) -> Result<OpResult, PdfError> {
     let mut doc = Document::load(input)?;
     if doc.is_encrypted() {
@@ -94,19 +128,57 @@ fn encrypt_document(
         owner_password
     };
 
-    let mut crypt_filters: BTreeMap<Vec<u8>, Arc<dyn CryptFilter>> = BTreeMap::new();
-    crypt_filters.insert(b"StdCF".to_vec(), Arc::new(Aes128CryptFilter));
+    // Build permissions bitflags
+    let mut perms = Permissions::empty();
+    perms.insert(Permissions::COPYABLE_FOR_ACCESSIBILITY);
+    if permissions.allow_print {
+        perms.insert(Permissions::PRINTABLE | Permissions::PRINTABLE_IN_HIGH_QUALITY);
+    }
+    if permissions.allow_copy {
+        perms.insert(Permissions::COPYABLE);
+    }
+    if permissions.allow_modify {
+        perms.insert(Permissions::MODIFIABLE | Permissions::ASSEMBLABLE);
+    }
+    if permissions.allow_annotate {
+        perms.insert(Permissions::ANNOTABLE | Permissions::FILLABLE);
+    }
 
-    let state = EncryptionState::try_from(EncryptionVersion::V4 {
-        document: &doc,
-        encrypt_metadata: true,
-        crypt_filters,
-        stream_filter: b"StdCF".to_vec(),
-        string_filter: b"StdCF".to_vec(),
-        owner_password: owner,
-        user_password,
-        permissions: Permissions::all(),
-    })?;
+    let state = if algorithm.eq_ignore_ascii_case("aes128") {
+        let mut crypt_filters: BTreeMap<Vec<u8>, Arc<dyn CryptFilter>> = BTreeMap::new();
+        crypt_filters.insert(b"StdCF".to_vec(), Arc::new(Aes128CryptFilter));
+        EncryptionState::try_from(EncryptionVersion::V4 {
+            document: &doc,
+            encrypt_metadata: true,
+            crypt_filters,
+            stream_filter: b"StdCF".to_vec(),
+            string_filter: b"StdCF".to_vec(),
+            owner_password: owner,
+            user_password,
+            permissions: perms,
+        })?
+    } else {
+        // AES-256 (Revision 5/6 standard handler)
+        let mut crypt_filters: BTreeMap<Vec<u8>, Arc<dyn CryptFilter>> = BTreeMap::new();
+        crypt_filters.insert(b"StdCF".to_vec(), Arc::new(Aes256CryptFilter));
+        let mut key = [0u8; 32];
+        if getrandom::getrandom(&mut key).is_err() {
+            let rand_bytes = random_file_id();
+            key[..16].copy_from_slice(&rand_bytes);
+            key[16..].copy_from_slice(&random_file_id());
+        }
+        EncryptionState::try_from(EncryptionVersion::V5 {
+            encrypt_metadata: true,
+            crypt_filters,
+            file_encryption_key: &key,
+            stream_filter: b"StdCF".to_vec(),
+            string_filter: b"StdCF".to_vec(),
+            owner_password: owner,
+            user_password,
+            permissions: perms,
+        })?
+    };
+
 
     let page_count = doc.get_pages().len() as u32;
     doc.encrypt(&state)?;

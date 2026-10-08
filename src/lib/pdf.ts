@@ -18,6 +18,15 @@ export interface PdfLink {
   destPage?: number;
 }
 
+export interface PdfFormField {
+  id: string;
+  name: string;
+  type: "text" | "checkbox" | "choice";
+  rect: [number, number, number, number];
+  value: string;
+  readOnly?: boolean;
+}
+
 /** Handle around an open pdf.js document. Always `destroy()` when done. */
 export interface PdfDocHandle {
   path: string;
@@ -26,6 +35,7 @@ export interface PdfDocHandle {
   getPageDimensions(page: number): Promise<{ width: number; height: number }>;
   renderTextLayer(page: number, scale: number, container: HTMLElement): Promise<void>;
   getPageLinks(page: number, scale: number): Promise<PdfLink[]>;
+  getPageFormFields(page: number, scale: number): Promise<PdfFormField[]>;
   getPageText(page: number): Promise<string>;
   getPageTextItems(page: number): Promise<TextItemData[]>;
   destroy(): Promise<void>;
@@ -124,6 +134,43 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
       pdfPage.cleanup();
       return links;
     },
+
+    async getPageFormFields(page: number, scale: number): Promise<PdfFormField[]> {
+      if (destroyed) throw new Error("document closed");
+      const pdfPage = await doc.getPage(page);
+      const viewport = pdfPage.getViewport({ scale });
+      const annotations = await pdfPage.getAnnotations();
+      const fields: PdfFormField[] = [];
+
+      for (const ann of annotations) {
+        if (ann.subtype === "Widget" && ann.fieldName && ann.rect && ann.rect.length === 4) {
+          const viewRect = viewport.convertToViewportRectangle(ann.rect);
+          const x1 = Math.min(viewRect[0], viewRect[2]);
+          const y1 = Math.min(viewRect[1], viewRect[3]);
+          const x2 = Math.max(viewRect[0], viewRect[2]);
+          const y2 = Math.max(viewRect[1], viewRect[3]);
+
+          let fieldType: "text" | "checkbox" | "choice" = "text";
+          if (ann.fieldType === "Btn") {
+            fieldType = "checkbox";
+          } else if (ann.fieldType === "Ch") {
+            fieldType = "choice";
+          }
+
+          fields.push({
+            id: ann.id || ann.fieldName,
+            name: ann.fieldName,
+            type: fieldType,
+            rect: [x1, y1, x2, y2],
+            value: typeof ann.fieldValue === "string" ? ann.fieldValue : (ann.fieldValue ? String(ann.fieldValue) : ""),
+            readOnly: Boolean(ann.readOnly),
+          });
+        }
+      }
+      pdfPage.cleanup();
+      return fields;
+    },
+
 
     async getPageText(page: number): Promise<string> {
       if (destroyed) throw new Error("document closed");

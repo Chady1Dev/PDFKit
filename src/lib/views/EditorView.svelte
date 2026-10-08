@@ -26,9 +26,10 @@
   } from "../docStore";
   import {
     stampPageOverlays, removeWatermark, cleanWatermarkBytes, writePdfBytes,
-    baseName, type PageOverlayPayload
+    fillForm, baseName, type PageOverlayPayload
   } from "../api";
-  import { openPdf, type PdfLink } from "../pdf";
+  import { openPdf, type PdfLink, type PdfFormField } from "../pdf";
+
   import { pushToast, pendingFiles } from "../stores";
   import { logActivity } from "../activityStore";
 
@@ -98,7 +99,10 @@
   let showZoomMenu = false;
   let textLayerDiv: HTMLDivElement | null = null;
   let currentLinks: PdfLink[] = [];
+  let currentFormFields: PdfFormField[] = [];
+  let docFormValues: Record<string, string> = {};
   let selectedText = "";
+
   let selectedTextRect: { left: number; top: number; width: number; height: number } | null = null;
   let visiblePageRange: { start: number; end: number } = { start: 1, end: 3 };
   let showHighlighterMenu = false;
@@ -799,7 +803,13 @@
       } catch {
         currentLinks = [];
       }
+      try {
+        currentFormFields = await activeDoc.handle.getPageFormFields(activeDoc.currentPage, activeDoc.scale);
+      } catch {
+        currentFormFields = [];
+      }
     } catch (e) {
+
       console.error("renderCurrentPage error:", e);
     }
   }
@@ -2833,18 +2843,79 @@
         }
 
         // 2. All non-redact items (highlight, text, rect, circle, pen, signature, whiteout) go into a transparent overlay
+        // 2. All non-redact items (highlight, text, rect, circle, pen, signature, whiteout) go into a transparent overlay
         if (nonRedactItems.length > 0) {
-          const offCanvas = document.createElement("canvas");
-          offCanvas.width = rendered.width;
-          offCanvas.height = rendered.height;
-          const offCtx = offCanvas.getContext("2d")!;
+          const unscaledW = rendered.width / saveScale;
+          const unscaledH = rendered.height / saveScale;
 
-          offCtx.save();
-          offCtx.scale(saveScale, saveScale);
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
           for (const item of nonRedactItems) {
-            drawSingleAnnotation(offCtx, item, saveScale);
+            if (item.type === "pen") {
+              const pts = item.points || [];
+              for (const pt of pts) {
+                if (pt.x < minX) minX = pt.x;
+                if (pt.y < minY) minY = pt.y;
+                if (pt.x > maxX) maxX = pt.x;
+                if (pt.y > maxY) maxY = pt.y;
+              }
+              const pad = (item.size || 2) * 2;
+              minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+            } else if (item.type === "arrow") {
+              const sx = item.startX ?? item.x ?? 0;
+              const sy = item.startY ?? item.y ?? 0;
+              const ex = item.endX ?? sx;
+              const ey = item.endY ?? sy;
+              minX = Math.min(minX, sx - 15, ex - 15);
+              minY = Math.min(minY, sy - 15, ey - 15);
+              maxX = Math.max(maxX, sx + 15, ex + 15);
+              maxY = Math.max(maxY, sy + 15, ey + 15);
+            } else {
+              const x = item.x ?? 0;
+              const y = item.y ?? 0;
+              const w = item.width || (item.type === "text" ? 250 : 50);
+              const h = item.height || (item.type === "text" ? 50 : 50);
+              minX = Math.min(minX, x - 5);
+              minY = Math.min(minY, y - 5);
+              maxX = Math.max(maxX, x + w + 5);
+              maxY = Math.max(maxY, y + h + 5);
+            }
           }
-          offCtx.restore();
+
+          minX = Math.max(0, Math.floor(minX));
+          minY = Math.max(0, Math.floor(minY));
+          maxX = Math.min(unscaledW, Math.ceil(maxX));
+          maxY = Math.min(unscaledH, Math.ceil(maxY));
+
+          const cropW = maxX - minX;
+          const cropH = maxY - minY;
+          const useCrop = cropW > 0 && cropH > 0 && (cropW * cropH < unscaledW * unscaledH * 0.85);
+
+          const offCanvas = document.createElement("canvas");
+          const offCtx = offCanvas.getContext("2d")!;
+          let overlayBbox: [number, number, number, number] | null = null;
+
+          if (useCrop) {
+            offCanvas.width = Math.ceil(cropW * saveScale);
+            offCanvas.height = Math.ceil(cropH * saveScale);
+            offCtx.save();
+            offCtx.scale(saveScale, saveScale);
+            offCtx.translate(-minX, -minY);
+            for (const item of nonRedactItems) {
+              drawSingleAnnotation(offCtx, item, saveScale);
+            }
+            offCtx.restore();
+
+            overlayBbox = [minX, unscaledH - maxY, cropW, cropH];
+          } else {
+            offCanvas.width = rendered.width;
+            offCanvas.height = rendered.height;
+            offCtx.save();
+            offCtx.scale(saveScale, saveScale);
+            for (const item of nonRedactItems) {
+              drawSingleAnnotation(offCtx, item, saveScale);
+            }
+            offCtx.restore();
+          }
 
           const blob = await new Promise<Blob | null>((resolve) => offCanvas.toBlob(resolve, "image/png"));
           if (!blob) throw new Error(`Sayfa ${p} çizim katmanı işlenemedi`);
@@ -2853,9 +2924,11 @@
             page: p,
             png_data: pngBytes,
             replace_page_content: false,
+            bbox: overlayBbox,
           });
         }
       }
+
 
       // Filter out all 'redact' items from editor metadata so they cannot be selected,
       // moved, or deleted when reopening or clearing in PDFKit. They are now baked into the page pixels!
@@ -2868,14 +2941,25 @@
         }
       }
 
+      let sourcePdfForOverlays = activeDoc.path;
+      if (Object.keys(docFormValues).length > 0) {
+        try {
+          await fillForm(activeDoc.path, outputPath, docFormValues);
+          sourcePdfForOverlays = outputPath;
+        } catch (fe) {
+          console.warn("fillForm save error:", fe);
+        }
+      }
+
       const editorData = JSON.stringify(sanitizedAnnotations);
       const res = await stampPageOverlays(
-        activeDoc.path,
+        sourcePdfForOverlays,
         outputPath,
         overlays,
         editorData,
         activeDoc.cleanPdfBytes ?? null
       );
+
       activeDoc.cleanPdfBytes = undefined;
       try {
         localStorage.setItem("pdfkit_ann_" + outputPath, editorData);
@@ -3834,6 +3918,41 @@
                   ></button>
                 {/each}
               </div>
+
+              <!-- Interactive AcroForm Fields -->
+              {#if currentFormFields.length > 0}
+                <div class="absolute inset-0 pointer-events-none z-10">
+                  {#each currentFormFields as field}
+                    {#if field.type === "checkbox"}
+                      <input
+                        type="checkbox"
+                        class="absolute pointer-events-auto cursor-pointer rounded text-indigo-600 focus:ring-indigo-500 border-zinc-400"
+                        style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
+                        checked={docFormValues[field.name] === "Yes" || (!docFormValues[field.name] && field.value === "Yes")}
+                        disabled={field.readOnly}
+                        on:change={(e) => {
+                          docFormValues[field.name] = e.currentTarget.checked ? "Yes" : "Off";
+                          if (activeDoc) markDocumentModified(activeDoc.id);
+                        }}
+                      />
+                    {:else}
+                      <input
+                        type="text"
+                        class="absolute pointer-events-auto rounded bg-blue-50/40 hover:bg-white focus:bg-white px-1 py-0.5 text-xs text-zinc-900 border border-blue-400/60 focus:border-indigo-600 focus:outline-none shadow-xs transition-colors"
+                        style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px; font-size: {Math.max(9, Math.min(14, (field.rect[3] - field.rect[1]) * 0.7))}px;"
+                        value={docFormValues[field.name] !== undefined ? docFormValues[field.name] : field.value}
+                        placeholder={field.name}
+                        disabled={field.readOnly}
+                        on:input={(e) => {
+                          docFormValues[field.name] = e.currentTarget.value;
+                          if (activeDoc) markDocumentModified(activeDoc.id);
+                        }}
+                      />
+                    {/if}
+                  {/each}
+                </div>
+              {/if}
+
 
               <canvas
                 bind:this={overlayCanvas}

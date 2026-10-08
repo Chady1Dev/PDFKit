@@ -65,12 +65,36 @@ export const imagesToPdf = (inputs: string[], output: string) =>
 export const writeBinaryFile = (path: string, data: Uint8Array) =>
   invoke<void>("write_binary_file", { path, data });
 
-export const compressPdf = (input: string, output: string) =>
-  invoke<CompressResult>("compress_pdf", { input, output });
+export type CompressLevel = "lossless" | "balanced" | "maximum";
 
-// --- Phase 2 ---
-export const encryptPdf = (input: string, output: string, userPassword: string, ownerPassword: string) =>
-  invoke<OpResult>("encrypt_pdf", { input, output, userPassword, ownerPassword });
+export const compressPdf = (input: string, output: string, level?: CompressLevel) =>
+  invoke<CompressResult>("compress_pdf", { input, output, level: level ?? "lossless" });
+
+// --- Phase 2 & 4: Security ---
+export interface EncryptionPermissions {
+  allow_print: boolean;
+  allow_copy: boolean;
+  allow_modify: boolean;
+  allow_annotate: boolean;
+}
+
+export const encryptPdf = (
+  input: string,
+  output: string,
+  userPassword: string,
+  ownerPassword: string,
+  permissions?: EncryptionPermissions | null,
+  algorithm?: string | null,
+) =>
+  invoke<OpResult>("encrypt_pdf", {
+    input,
+    output,
+    userPassword,
+    ownerPassword,
+    permissions: permissions ?? null,
+    algorithm: algorithm ?? "aes256",
+  });
+
 
 export const decryptPdf = (input: string, output: string, password: string) =>
   invoke<OpResult>("decrypt_pdf", { input, output, password });
@@ -159,7 +183,9 @@ export interface PageOverlayPayload {
   page: number;
   png_data: number[] | Uint8Array;
   replace_page_content?: boolean;
+  bbox?: [number, number, number, number] | null;
 }
+
 
 export const stampPageOverlays = (
   input: string,

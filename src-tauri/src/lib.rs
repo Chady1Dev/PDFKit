@@ -68,7 +68,10 @@ pub fn run() {
             commands::forms::stamp_image,
             commands::convert_office::export_office_document,
             commands::convert_office::cancel_conversion,
+            commands::ocr::ocr_image,
+            commands::ocr::add_searchable_ocr_layer,
         ])
+
         .run(tauri::generate_context!())
         .expect("error while running PDFKit");
 }

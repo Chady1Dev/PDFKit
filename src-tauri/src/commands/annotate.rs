@@ -15,7 +15,9 @@ pub struct PageOverlay {
     pub png_data: Vec<u8>,
     #[serde(default)]
     pub replace_page_content: bool,
+    pub bbox: Option<[f64; 4]>,
 }
+
 
 #[derive(Debug, serde::Serialize)]
 pub struct EditorLoadResult {
@@ -1922,18 +1924,22 @@ pub fn apply_overlays(
         doc.get_or_create_resources(page_id)?;
         doc.add_xobject(page_id, xobj_name.as_bytes(), img_id)?;
 
-        let [x0, y0, x1, y1] = media_box(&doc, page_id);
-        let w = x1 - x0;
-        let h = y1 - y0;
+        let (x, y, w, h) = if let Some([bx, by, bw, bh]) = overlay.bbox {
+            (bx, by, bw, bh)
+        } else {
+            let [x0, y0, x1, y1] = media_box(&doc, page_id);
+            (x0, y0, x1 - x0, y1 - y0)
+        };
 
         let content = format!(
-            "q\n{w:.2} 0 0 {h:.2} {x0:.2} {y0:.2} cm\n/{name} Do\nQ\n",
+            "q\n{w:.2} 0 0 {h:.2} {x:.2} {y:.2} cm\n/{name} Do\nQ\n",
             w = w,
             h = h,
-            x0 = x0,
-            y0 = y0,
+            x = x,
+            y = y,
             name = xobj_name
         );
+
         let mut stream_dict = Dictionary::new();
         stream_dict.set("PDFKit_Overlay", Object::Boolean(true));
         let stream = Stream::new(stream_dict, content.into_bytes());

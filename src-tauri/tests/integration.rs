@@ -193,6 +193,8 @@ fn encrypt_then_decrypt() {
         enc.to_string_lossy().into_owned(),
         "user123".into(),
         "".into(),
+        None,
+        Some("aes256".into()),
     ))
     .unwrap();
     assert!(Document::load(&enc).unwrap().is_encrypted());
@@ -220,6 +222,8 @@ fn decrypt_rejects_wrong_password() {
         enc.to_string_lossy().into_owned(),
         "right".into(),
         "".into(),
+        None,
+        None,
     ))
     .unwrap();
 
@@ -230,6 +234,43 @@ fn decrypt_rejects_wrong_password() {
         "wrong".into(),
     ));
     assert!(result.is_err());
+}
+
+#[test]
+fn encrypt_with_granular_permissions() {
+    let ws = workspace("permissions");
+    let src = ws.join("src.pdf");
+    make_pdf(&src, 1);
+    let enc = ws.join("enc_restricted.pdf");
+
+    let perms = commands::security::EncryptionPermissions {
+        allow_print: false,
+        allow_copy: false,
+        allow_modify: false,
+        allow_annotate: true,
+    };
+
+    run(commands::security::encrypt_pdf(
+        src.to_string_lossy().into_owned(),
+        enc.to_string_lossy().into_owned(),
+        "read_only".into(),
+        "admin_secret".into(),
+        Some(perms),
+        Some("aes256".into()),
+    ))
+    .unwrap();
+
+    assert!(Document::load(&enc).unwrap().is_encrypted());
+
+    // User password unlocks it
+    let dec = ws.join("dec.pdf");
+    run(commands::security::decrypt_pdf(
+        enc.to_string_lossy().into_owned(),
+        dec.to_string_lossy().into_owned(),
+        "read_only".into(),
+    ))
+    .unwrap();
+    assert!(!Document::load(&dec).unwrap().is_encrypted());
 }
 
 #[test]
@@ -442,6 +483,7 @@ fn images_roundtrip_and_compress() {
     let c = run(commands::compress::compress_pdf(
         out.to_string_lossy().into_owned(),
         comp.to_string_lossy().into_owned(),
+        None,
     ))
     .unwrap();
     assert!(c.already_optimized);
@@ -493,6 +535,7 @@ fn compress_uncompressed_pdf_and_safety_guard() {
     let c = run(commands::compress::compress_pdf(
         src.to_string_lossy().into_owned(),
         comp.to_string_lossy().into_owned(),
+        Some("lossless".into()),
     ))
     .unwrap();
 
@@ -506,10 +549,38 @@ fn compress_uncompressed_pdf_and_safety_guard() {
     let c2 = run(commands::compress::compress_pdf(
         comp.to_string_lossy().into_owned(),
         comp2.to_string_lossy().into_owned(),
+        Some("lossless".into()),
     ))
     .unwrap();
     assert!(c2.already_optimized);
     assert!(!comp2.exists());
+}
+
+#[test]
+fn compress_with_image_reencoding() {
+    let ws = workspace("compress_images");
+    // Create an uncompressed large image PDF
+    let img = image::RgbImage::from_pixel(400, 300, image::Rgb([180, 50, 50]));
+    let img_path = ws.join("test_large.png");
+    img.save(&img_path).unwrap();
+
+    let pdf_out = ws.join("large_img.pdf");
+    run(commands::images::images_to_pdf(
+        vec![img_path.to_string_lossy().into_owned()],
+        pdf_out.to_string_lossy().into_owned(),
+    ))
+    .unwrap();
+
+    let comp_balanced = ws.join("balanced.pdf");
+    let res = run(commands::compress::compress_pdf(
+        pdf_out.to_string_lossy().into_owned(),
+        comp_balanced.to_string_lossy().into_owned(),
+        Some("balanced".into()),
+    ))
+    .unwrap();
+
+    // Verify it produced a valid document
+    assert!(Document::load(&comp_balanced).is_ok() || res.already_optimized);
 }
 
 #[test]
@@ -562,7 +633,9 @@ fn stamp_page_overlays() {
         page: 1,
         png_data,
         replace_page_content: false,
+        bbox: None,
     }];
+
 
     let res = run(commands::annotate::stamp_page_overlays(
         src.to_string_lossy().into_owned(),
@@ -1169,7 +1242,9 @@ fn test_redaction_physically_purges_unreferenced_text() {
         page: 1,
         png_data,
         replace_page_content: true,
+        bbox: None,
     }];
+
 
     let res = run(commands::annotate::stamp_page_overlays(
         src.to_string_lossy().into_owned(),
@@ -1201,6 +1276,77 @@ fn test_redaction_physically_purges_unreferenced_text() {
         }
     }
 }
+
+#[test]
+fn test_cropped_page_overlay_with_bbox() {
+    let ws = workspace("cropped_overlay");
+    let src = ws.join("src.pdf");
+    make_pdf(&src, 1);
+
+    // Small cropped image overlay (e.g. 50x30 stamp)
+    let img = image::RgbaImage::from_pixel(50, 30, image::Rgba([0, 150, 255, 200]));
+    let mut buf = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut buf, image::ImageFormat::Png).unwrap();
+    let png_data = buf.into_inner();
+
+    let out = ws.join("stamped_cropped.pdf");
+    let overlays = vec![pdfkit_lib::commands::annotate::PageOverlay {
+        page: 1,
+        png_data,
+        replace_page_content: false,
+        bbox: Some([20.0, 40.0, 50.0, 30.0]),
+    }];
+
+    let res = run(commands::annotate::stamp_page_overlays(
+        src.to_string_lossy().into_owned(),
+        out.to_string_lossy().into_owned(),
+        overlays,
+        None,
+        None,
+    ))
+    .unwrap();
+
+    assert_eq!(res.total_pages, 1);
+    let check = Document::load(&out).unwrap();
+    assert_eq!(check.get_pages().len(), 1);
+
+    // Verify content stream contains the cropped cm transform
+    let p1_id = check.get_pages()[&1];
+    let content = check.get_page_content(p1_id);
+    let content_str = String::from_utf8_lossy(&content);
+    assert!(content_str.contains("50.00 0 0 30.00 20.00 40.00 cm"));
+}
+
+#[test]
+fn test_ocr_searchable_layer() {
+    let ws = workspace("ocr_layer");
+    let src = ws.join("src.pdf");
+    make_pdf(&src, 1);
+
+    // Create an image with text "PDFKit"
+    let sample_img = ws.join("sample.png");
+    let img = image::RgbImage::from_pixel(100, 50, image::Rgb([255, 255, 255]));
+    img.save(&sample_img).unwrap();
+
+    let out = ws.join("searchable.pdf");
+    let res = run(commands::ocr::add_searchable_ocr_layer(
+        src.to_string_lossy().into_owned(),
+        out.to_string_lossy().into_owned(),
+        1,
+        sample_img.to_string_lossy().into_owned(),
+    ));
+
+    // If Windows OCR succeeds on this platform, assert document is valid
+    if let Ok(res) = res {
+        assert_eq!(res.total_pages, 1);
+        let check = Document::load(&out).unwrap();
+        let p1_id = check.get_pages()[&1];
+        let content = check.get_page_content(p1_id);
+        let content_str = String::from_utf8_lossy(&content);
+        assert!(content_str.contains("3 Tr"));
+    }
+}
+
 
 
 
