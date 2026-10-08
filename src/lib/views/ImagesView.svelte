@@ -1071,13 +1071,21 @@
             {isSelected ? 'border-indigo-500 bg-indigo-500/5 ring-1 ring-indigo-500' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-400'}
             {isDragged ? 'opacity-35 scale-95 ring-2 ring-indigo-400/40' : ''}
             {isTarget ? 'ring-4 ring-indigo-500 scale-105 shadow-2xl z-30' : ''}"
+          role="button"
+          tabindex="0"
           on:pointerdown={(e) => handleCardPointerDownImg(e, i)}
           on:click={() => {
             if (wasDraggingImg) return;
             toggleImageSelect(i);
           }}
-          role="listitem"
+          on:keydown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              toggleImageSelect(i);
+            }
+          }}
         >
+
           <!-- Preview container -->
           <div
             class="relative flex h-36 w-full items-center justify-center overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-800/60"

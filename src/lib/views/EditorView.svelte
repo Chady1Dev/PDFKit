@@ -29,8 +29,11 @@
     fillForm, baseName, type PageOverlayPayload
   } from "../api";
   import { openPdf, type PdfLink, type PdfFormField } from "../pdf";
+  import { renderArrow, drawSingleAnnotation } from "../editor/render";
+  import { calculateAnnotationsBoundingBox } from "../editor/geometry";
 
   import { pushToast, pendingFiles } from "../stores";
+
   import { logActivity } from "../activityStore";
 
   let showRemoveWatermarkModal = false;
@@ -272,58 +275,8 @@
     }
   }
 
-  // Pixel-perfect arrow renderer without line stub protrusion
-  function renderArrow(
-    ctx: CanvasRenderingContext2D,
-    startX: number,
-    startY: number,
-    endX: number,
-    endY: number,
-    color: string,
-    strokeWidth: number,
-    opacity?: number
-  ) {
-    const dist = Math.hypot(endX - startX, endY - startY);
-    if (dist < 2) return;
-
-    ctx.save();
-    if (opacity !== undefined) ctx.globalAlpha = opacity;
-
-    const angle = Math.atan2(endY - startY, endX - startX);
-    const w = Math.max(1, strokeWidth);
-    const headLen = Math.min(dist * 0.75, Math.max(15, w * 3.8));
-    const headAngle = Math.PI / 6;
-    const shaftEndX = endX - headLen * 0.75 * Math.cos(angle);
-    const shaftEndY = endY - headLen * 0.75 * Math.sin(angle);
-
-    // 1. Shaft with butt cap to prevent stroke poking past arrowhead tip
-    ctx.strokeStyle = color;
-    ctx.lineWidth = w;
-    ctx.lineCap = "butt";
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(shaftEndX, shaftEndY);
-    ctx.stroke();
-
-    // 2. Solid crisp arrowhead with sharp tip at (endX, endY)
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(endX, endY);
-    ctx.lineTo(
-      endX - headLen * Math.cos(angle - headAngle),
-      endY - headLen * Math.sin(angle - headAngle)
-    );
-    ctx.lineTo(
-      endX - headLen * Math.cos(angle + headAngle),
-      endY - headLen * Math.sin(angle + headAngle)
-    );
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-  }
-
   // Annotation Clipboard System (Ctrl+C / Ctrl+V across pages with offset)
+
   let annotationClipboard: Annotation[] = [];
   let pasteOffsetCount = 1;
   let lastDragPageTime = 0;
@@ -2642,109 +2595,8 @@
     executeSave(pendingSaveAs);
   }
 
-  function drawSingleAnnotation(offCtx: CanvasRenderingContext2D, item: Annotation, saveScale: number) {
-    offCtx.save();
-    if (item.blendMode === "destination-out" && item.points) {
-      offCtx.globalCompositeOperation = "destination-out";
-      offCtx.strokeStyle = "rgba(0,0,0,1)";
-      offCtx.lineWidth = (item.strokeWidth || 20) / saveScale;
-      offCtx.lineCap = "round";
-      offCtx.lineJoin = "round";
-      offCtx.beginPath();
-      offCtx.moveTo(item.points[0].x, item.points[0].y);
-      for (let i = 1; i < item.points.length; i++) {
-        offCtx.lineTo(item.points[i].x, item.points[i].y);
-      }
-      offCtx.stroke();
-      offCtx.globalCompositeOperation = "source-over";
-    } else if (item.type === "stroke" && item.points) {
-      if (item.opacity !== undefined) offCtx.globalAlpha = item.opacity;
-      offCtx.strokeStyle = item.color || "#000";
-      offCtx.lineWidth = item.strokeWidth || 3;
-      offCtx.lineCap = "round";
-      offCtx.lineJoin = "round";
-      offCtx.beginPath();
-      offCtx.moveTo(item.points[0].x, item.points[0].y);
-      for (let i = 1; i < item.points.length; i++) {
-        offCtx.lineTo(item.points[i].x, item.points[i].y);
-      }
-      offCtx.stroke();
-    } else if (item.type === "highlighter" && item.points) {
-      offCtx.strokeStyle = item.color || highlighterColors[0];
-      offCtx.lineWidth = 18;
-      offCtx.lineCap = "round";
-      offCtx.lineJoin = "round";
-      offCtx.beginPath();
-      offCtx.moveTo(item.points[0].x, item.points[0].y);
-      for (let i = 1; i < item.points.length; i++) {
-        offCtx.lineTo(item.points[i].x, item.points[i].y);
-      }
-      offCtx.stroke();
-    } else if (item.type === "text" && item.text && item.x !== undefined && item.y !== undefined) {
-      if (item.opacity !== undefined) offCtx.globalAlpha = item.opacity;
-      offCtx.font = `${item.fontSize || 18}px sans-serif`;
-      offCtx.fillStyle = item.color || "#9333ea";
-      offCtx.textBaseline = "top";
-      offCtx.fillText(item.text, item.x, item.y);
-    } else if (item.type === "rect" && item.x !== undefined && item.y !== undefined) {
-      if (item.opacity !== undefined) offCtx.globalAlpha = item.opacity;
-      if (item.fillColor && item.fillColor !== "transparent") {
-        offCtx.fillStyle = item.fillColor;
-        offCtx.fillRect(item.x, item.y, item.width || 0, item.height || 0);
-      }
-      offCtx.strokeStyle = item.color || "#000";
-      offCtx.lineWidth = item.strokeWidth || 3;
-      offCtx.strokeRect(item.x, item.y, item.width || 0, item.height || 0);
-    } else if (item.type === "redact" && item.x !== undefined && item.y !== undefined) {
-      offCtx.fillStyle = item.fillColor || "#000000";
-      offCtx.fillRect(item.x, item.y, item.width || 0, item.height || 0);
-    } else if (item.type === "circle" && item.x !== undefined && item.y !== undefined) {
-      if (item.opacity !== undefined) offCtx.globalAlpha = item.opacity;
-      const rx = (item.width || 0) / 2;
-      const ry = (item.height || 0) / 2;
-      offCtx.beginPath();
-      offCtx.ellipse(item.x + rx, item.y + ry, rx, ry, 0, 0, Math.PI * 2);
-      if (item.fillColor && item.fillColor !== "transparent") {
-        offCtx.fillStyle = item.fillColor;
-        offCtx.fill();
-      }
-      offCtx.strokeStyle = item.color || "#000";
-      offCtx.lineWidth = item.strokeWidth || 3;
-      offCtx.stroke();
-    } else if (item.type === "line" && item.startX !== undefined && item.startY !== undefined && item.endX !== undefined && item.endY !== undefined) {
-      if (item.opacity !== undefined) offCtx.globalAlpha = item.opacity;
-      offCtx.strokeStyle = item.color || "#000";
-      offCtx.lineWidth = item.strokeWidth || 3;
-      offCtx.beginPath();
-      offCtx.moveTo(item.startX, item.startY);
-      offCtx.lineTo(item.endX, item.endY);
-      offCtx.stroke();
-    } else if (item.type === "arrow" && item.startX !== undefined && item.startY !== undefined && item.endX !== undefined && item.endY !== undefined) {
-      renderArrow(
-        offCtx,
-        item.startX,
-        item.startY,
-        item.endX,
-        item.endY,
-        item.color || "#000",
-        item.strokeWidth || 3,
-        item.opacity
-      );
-    } else if (item.type === "image" && item.x !== undefined && item.y !== undefined) {
-      if (item.imageEl instanceof HTMLImageElement && item.imageEl.complete && item.imageEl.naturalWidth > 0) {
-        offCtx.drawImage(
-          item.imageEl,
-          item.x,
-          item.y,
-          item.width || 120,
-          item.height || 60
-        );
-      }
-    }
-    offCtx.restore();
-  }
-
   async function executeSave(forceSaveAs = false) {
+
     if (!activeDoc) return;
     commitTextInput();
 
@@ -2843,69 +2695,28 @@
         }
 
         // 2. All non-redact items (highlight, text, rect, circle, pen, signature, whiteout) go into a transparent overlay
-        // 2. All non-redact items (highlight, text, rect, circle, pen, signature, whiteout) go into a transparent overlay
         if (nonRedactItems.length > 0) {
           const unscaledW = rendered.width / saveScale;
           const unscaledH = rendered.height / saveScale;
+          const bbox = calculateAnnotationsBoundingBox(nonRedactItems, unscaledW, unscaledH);
 
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          for (const item of nonRedactItems) {
-            if (item.type === "pen") {
-              const pts = item.points || [];
-              for (const pt of pts) {
-                if (pt.x < minX) minX = pt.x;
-                if (pt.y < minY) minY = pt.y;
-                if (pt.x > maxX) maxX = pt.x;
-                if (pt.y > maxY) maxY = pt.y;
-              }
-              const pad = (item.size || 2) * 2;
-              minX -= pad; minY -= pad; maxX += pad; maxY += pad;
-            } else if (item.type === "arrow") {
-              const sx = item.startX ?? item.x ?? 0;
-              const sy = item.startY ?? item.y ?? 0;
-              const ex = item.endX ?? sx;
-              const ey = item.endY ?? sy;
-              minX = Math.min(minX, sx - 15, ex - 15);
-              minY = Math.min(minY, sy - 15, ey - 15);
-              maxX = Math.max(maxX, sx + 15, ex + 15);
-              maxY = Math.max(maxY, sy + 15, ey + 15);
-            } else {
-              const x = item.x ?? 0;
-              const y = item.y ?? 0;
-              const w = item.width || (item.type === "text" ? 250 : 50);
-              const h = item.height || (item.type === "text" ? 50 : 50);
-              minX = Math.min(minX, x - 5);
-              minY = Math.min(minY, y - 5);
-              maxX = Math.max(maxX, x + w + 5);
-              maxY = Math.max(maxY, y + h + 5);
-            }
-          }
-
-          minX = Math.max(0, Math.floor(minX));
-          minY = Math.max(0, Math.floor(minY));
-          maxX = Math.min(unscaledW, Math.ceil(maxX));
-          maxY = Math.min(unscaledH, Math.ceil(maxY));
-
-          const cropW = maxX - minX;
-          const cropH = maxY - minY;
-          const useCrop = cropW > 0 && cropH > 0 && (cropW * cropH < unscaledW * unscaledH * 0.85);
-
+          const useCrop = bbox !== null && (bbox.width * bbox.height < unscaledW * unscaledH * 0.85);
           const offCanvas = document.createElement("canvas");
           const offCtx = offCanvas.getContext("2d")!;
           let overlayBbox: [number, number, number, number] | null = null;
 
-          if (useCrop) {
-            offCanvas.width = Math.ceil(cropW * saveScale);
-            offCanvas.height = Math.ceil(cropH * saveScale);
+          if (useCrop && bbox) {
+            offCanvas.width = Math.ceil(bbox.width * saveScale);
+            offCanvas.height = Math.ceil(bbox.height * saveScale);
             offCtx.save();
             offCtx.scale(saveScale, saveScale);
-            offCtx.translate(-minX, -minY);
+            offCtx.translate(-bbox.minX, -bbox.minY);
             for (const item of nonRedactItems) {
               drawSingleAnnotation(offCtx, item, saveScale);
             }
             offCtx.restore();
 
-            overlayBbox = [minX, unscaledH - maxY, cropW, cropH];
+            overlayBbox = [bbox.minX, unscaledH - bbox.maxY, bbox.width, bbox.height];
           } else {
             offCanvas.width = rendered.width;
             offCanvas.height = rendered.height;
@@ -2918,6 +2729,7 @@
           }
 
           const blob = await new Promise<Blob | null>((resolve) => offCanvas.toBlob(resolve, "image/png"));
+
           if (!blob) throw new Error(`Sayfa ${p} çizim katmanı işlenemedi`);
           const pngBytes = new Uint8Array(await blob.arrayBuffer());
           overlays.push({
