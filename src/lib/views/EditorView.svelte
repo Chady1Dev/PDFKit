@@ -97,7 +97,7 @@
   let pendingCloseDocId: string | null = null;
 
   // Faz 2 Reader state
-  let viewLayout: "single" | "continuous" = "single";
+  let viewLayout: "single" | "continuous" = "continuous";
   let isReadingMode = false;
   let showZoomMenu = false;
   let textLayerDiv: HTMLDivElement | null = null;
@@ -105,9 +105,9 @@
   let currentFormFields: PdfFormField[] = [];
   let docFormValues: Record<string, string> = {};
   let selectedText = "";
-
+  let textSelectionAnchor: { left: number; top: number } | null = null;
   let selectedTextRect: { left: number; top: number; width: number; height: number } | null = null;
-  let visiblePageRange: { start: number; end: number } = { start: 1, end: 3 };
+  let visiblePageRange: { start: number; end: number } = { start: 1, end: 5 };
   let showHighlighterMenu = false;
 
   // Tools state - Default color for text is PURPLE (#9333ea) as requested!
@@ -410,6 +410,99 @@
     pushToast(`Nesneler Sayfa ${targetPage}'e taşındı`, "info");
   }
 
+  function getPageUnderCursor(clientX: number, clientY: number): number | null {
+    if (!activeDoc) return null;
+    for (let p = 1; p <= activeDoc.pageCount; p++) {
+      const el = document.getElementById(`continuous-page-${p}`);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        if (clientY >= r.top - 20 && clientY <= r.bottom + 20) {
+          return p;
+        }
+      }
+    }
+    return null;
+  }
+
+  function transferDraggedItemToPage(targetPage: number, clientX: number, clientY: number) {
+    if (!activeDoc || targetPage === activeDoc.currentPage || targetPage < 1 || targetPage > activeDoc.pageCount) return;
+    const sourcePage = activeDoc.currentPage;
+    const sourceEl = document.getElementById(`continuous-page-${sourcePage}`);
+    const targetEl = document.getElementById(`continuous-page-${targetPage}`);
+    if (!sourceEl || !targetEl) return;
+
+    const sourceRect = sourceEl.getBoundingClientRect();
+    const targetRect = targetEl.getBoundingClientRect();
+    const s = activeDoc.scale;
+
+    const deltaX = (sourceRect.left - targetRect.left) / s;
+    const deltaY = (sourceRect.top - targetRect.top) / s;
+
+    const sourceList = activeDoc.annotations[sourcePage] || [];
+    const selSet = new Set(selectedAnnotationIds);
+    const itemsToMove: Annotation[] = [];
+    const remainingSourceItems: Annotation[] = [];
+
+    for (const item of sourceList) {
+      if (selSet.has(item.id)) {
+        itemsToMove.push(item);
+      } else {
+        remainingSourceItems.push(item);
+      }
+    }
+
+    if (itemsToMove.length === 0) return;
+
+    for (const item of itemsToMove) {
+      if (item.x !== undefined) item.x += deltaX;
+      if (item.y !== undefined) item.y += deltaY;
+      if (item.startX !== undefined) item.startX += deltaX;
+      if (item.startY !== undefined) item.startY += deltaY;
+      if (item.endX !== undefined) item.endX += deltaX;
+      if (item.endY !== undefined) item.endY += deltaY;
+      if (item.points) {
+        for (const pt of item.points) {
+          pt.x += deltaX;
+          pt.y += deltaY;
+        }
+      }
+    }
+
+    activeDoc.annotations[sourcePage] = remainingSourceItems;
+    setPageAnnotations(activeDoc.id, sourcePage, remainingSourceItems);
+
+    const targetList = [...(activeDoc.annotations[targetPage] || []), ...itemsToMove];
+    activeDoc.annotations[targetPage] = targetList;
+    setPageAnnotations(activeDoc.id, targetPage, targetList);
+
+    activeDoc.currentPage = targetPage;
+    updateDocPage(activeDoc.id, targetPage);
+
+    lastMoveX = (clientX - targetRect.left) / s;
+    lastMoveY = (clientY - targetRect.top) / s;
+    didMoveItem = true;
+
+    notifyPageThumbnailsUpdated(sourcePage);
+    notifyPageThumbnailsUpdated(targetPage);
+
+    tick().then(() => {
+      redrawOverlay();
+    });
+  }
+
+  async function handlePageSelect(selectedP: number, e?: MouseEvent) {
+    if (!activeDoc) return;
+    if (selectedP !== activeDoc.currentPage) {
+      if (textInputVisible) commitTextInput();
+      selectedAnnotationIds = [];
+      updateDocPage(activeDoc.id, selectedP);
+      await tick();
+      if (e && overlayCanvas) {
+        onMouseDown(e);
+      }
+    }
+  }
+
   // Active doc derived from docStore
   $: activeDoc = $openDocs.find((d) => d.id === $activeDocId) || null;
 
@@ -694,6 +787,24 @@
     }
   }
 
+  $: if (overlayCanvas && activeDoc) {
+    overlayCtx = overlayCanvas.getContext("2d");
+    redrawOverlay();
+  }
+
+  $: if (activeDoc && (activeDoc.currentPage || activeDoc.scale)) {
+    loadCurrentPageFormFields();
+  }
+
+  async function loadCurrentPageFormFields() {
+    if (!activeDoc) return;
+    try {
+      currentFormFields = await activeDoc.handle.getPageFormFields(activeDoc.currentPage, activeDoc.scale);
+    } catch {
+      currentFormFields = [];
+    }
+  }
+
   async function openNewFileDialog() {
     const selected = await open({
       multiple: false,
@@ -809,10 +920,14 @@
     showZoomMenu = false;
   }
 
-  function fitToWidth() {
-    if (!activeDoc || !canvasContainer || !pdfCanvas) return;
+  async function fitToWidth() {
+    if (!activeDoc || !canvasContainer) return;
     const containerW = canvasContainer.clientWidth - 48;
-    const pageW = pdfCanvas.width / activeDoc.scale;
+    let pageW = 595;
+    try {
+      const dims = await activeDoc.handle.getPageDimensions(activeDoc.currentPage || 1);
+      if (dims && dims.width > 0) pageW = dims.width;
+    } catch {}
     if (pageW > 0) {
       const next = Math.max(0.3, Math.min(3.5, containerW / pageW));
       updateDocScale(activeDoc.id, Math.round(next * 100) / 100);
@@ -820,12 +935,19 @@
     }
   }
 
-  function fitToPage() {
-    if (!activeDoc || !canvasContainer || !pdfCanvas) return;
+  async function fitToPage() {
+    if (!activeDoc || !canvasContainer) return;
     const containerW = canvasContainer.clientWidth - 48;
     const containerH = canvasContainer.clientHeight - 80;
-    const pageW = pdfCanvas.width / activeDoc.scale;
-    const pageH = pdfCanvas.height / activeDoc.scale;
+    let pageW = 595;
+    let pageH = 842;
+    try {
+      const dims = await activeDoc.handle.getPageDimensions(activeDoc.currentPage || 1);
+      if (dims && dims.width > 0 && dims.height > 0) {
+        pageW = dims.width;
+        pageH = dims.height;
+      }
+    } catch {}
     if (pageW > 0 && pageH > 0) {
       const scaleW = containerW / pageW;
       const scaleH = containerH / pageH;
@@ -866,21 +988,32 @@
     if (currentTool !== "select") {
       selectedText = "";
       selectedTextRect = null;
+      textSelectionAnchor = null;
       return;
     }
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !sel.toString().trim()) {
       selectedText = "";
       selectedTextRect = null;
+      textSelectionAnchor = null;
       return;
     }
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
       selectedText = sel.toString().trim();
+      // Anchor toolbar at initial word start point so it does NOT bounce around while user is selecting
+      if (!textSelectionAnchor) {
+        const clientRects = range.getClientRects();
+        const firstRect = clientRects.length > 0 ? clientRects[0] : rect;
+        textSelectionAnchor = {
+          left: firstRect.left + Math.min(firstRect.width / 2, 40),
+          top: firstRect.top - 8,
+        };
+      }
       selectedTextRect = {
-        left: rect.left + rect.width / 2,
-        top: rect.top - 8,
+        left: textSelectionAnchor.left,
+        top: textSelectionAnchor.top,
         width: rect.width,
         height: rect.height,
       };
@@ -891,21 +1024,30 @@
     if (!selectedText) return;
     try {
       await navigator.clipboard.writeText(selectedText);
-      pushToast({ message: "Metin kopyalandı", type: "success" });
+      pushToast("Metin kopyalandı", "success");
+      selectedText = "";
+      selectedTextRect = null;
+      textSelectionAnchor = null;
     } catch {}
   }
 
   function applyTextAction(action: "highlight" | "underline" | "strikethrough") {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !overlayCanvas || !activeDoc) return;
+    if (!sel || sel.isCollapsed || !activeDoc) return;
     const range = sel.getRangeAt(0);
     const clientRects = Array.from(range.getClientRects());
     if (clientRects.length === 0) return;
 
-    const canvasRect = overlayCanvas.getBoundingClientRect();
+    // Detect target page from selected node
+    const startNode = range.startContainer;
+    const pageEl = (startNode instanceof Element ? startNode : startNode.parentElement)?.closest("[data-page]");
+    const targetPage = pageEl ? Number(pageEl.getAttribute("data-page")) : activeDoc.currentPage;
+    const pageCanvasEl = pageEl?.querySelector("canvas");
+    const canvasRect = (pageCanvasEl || overlayCanvas)?.getBoundingClientRect();
+    if (!canvasRect) return;
+
     const s = activeDoc.scale;
-    const page = activeDoc.currentPage;
-    pushHistory(activeDoc.id, page);
+    pushHistory(activeDoc.id, targetPage);
 
     const newAnns: Annotation[] = [];
     for (const cr of clientRects) {
@@ -955,18 +1097,21 @@
     }
 
     if (newAnns.length > 0) {
-      const list = [...(activeDoc.annotations[page] || []), ...newAnns];
-      activeDoc.annotations[page] = list;
-      setPageAnnotations(activeDoc.id, page, list);
-      notifyPageThumbnailsUpdated(page);
-      redrawOverlay(list);
+      const list = [...(activeDoc.annotations[targetPage] || []), ...newAnns];
+      activeDoc.annotations[targetPage] = list;
+      setPageAnnotations(activeDoc.id, targetPage, list);
+      notifyPageThumbnailsUpdated(targetPage);
+      if (targetPage === activeDoc.currentPage) {
+        redrawOverlay(list);
+      }
       sel.removeAllRanges();
       selectedText = "";
       selectedTextRect = null;
-      pushToast({
-        message: action === "highlight" ? "Metin vurgulandı" : action === "underline" ? "Metnin altı çizildi" : "Metnin üstü çizildi",
-        type: "success",
-      });
+      textSelectionAnchor = null;
+      pushToast(
+        action === "highlight" ? "Metin vurgulandı" : action === "underline" ? "Metnin altı çizildi" : "Metnin üstü çizildi",
+        "success"
+      );
     }
   }
 
@@ -1191,7 +1336,7 @@
   }
 
   function handleContainerWheel(e: WheelEvent) {
-    if (!activeDoc || activeDoc.pageCount <= 1) return;
+    if (!activeDoc) return;
 
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
@@ -1199,52 +1344,13 @@
       return;
     }
 
-    if (isDraggingItem && selectedAnnotationIds.length > 0 && activeDoc) {
-      e.preventDefault();
-      const now = Date.now();
-      if (now - lastDragPageTime < 400) return;
-      if (e.deltaY > 0 && activeDoc.currentPage < activeDoc.pageCount) {
-        lastDragPageTime = now;
-        transferSelectedToPage(activeDoc.currentPage + 1, "top");
-      } else if (e.deltaY < 0 && activeDoc.currentPage > 1) {
-        lastDragPageTime = now;
-        transferSelectedToPage(activeDoc.currentPage - 1, "bottom");
+    if (isDraggingItem && canvasContainer) {
+      // While dragging an item, scroll the continuous container smoothly
+      canvasContainer.scrollTop += e.deltaY * 0.8;
+      const targetPage = getPageUnderCursor(e.clientX, e.clientY);
+      if (targetPage && targetPage !== activeDoc.currentPage) {
+        transferDraggedItemToPage(targetPage, e.clientX, e.clientY);
       }
-      return;
-    }
-
-    if (!canvasContainer) return;
-
-    const isAtBottom = canvasContainer.scrollTop + canvasContainer.clientHeight >= canvasContainer.scrollHeight - 25;
-    const isAtTop = canvasContainer.scrollTop <= 25;
-
-    const now = Date.now();
-    if (now - lastPageChangeTime < 350) return;
-
-    if (e.deltaY > 0 && isAtBottom && activeDoc.currentPage < activeDoc.pageCount) {
-      wheelAccumulator += e.deltaY;
-      if (wheelAccumulator > 70) {
-        e.preventDefault();
-        wheelAccumulator = 0;
-        lastPageChangeTime = now;
-        setPage(activeDoc.currentPage + 1);
-        tick().then(() => {
-          if (canvasContainer) canvasContainer.scrollTop = 0;
-        });
-      }
-    } else if (e.deltaY < 0 && isAtTop && activeDoc.currentPage > 1) {
-      wheelAccumulator += e.deltaY;
-      if (wheelAccumulator < -70) {
-        e.preventDefault();
-        wheelAccumulator = 0;
-        lastPageChangeTime = now;
-        setPage(activeDoc.currentPage - 1);
-        tick().then(() => {
-          if (canvasContainer) canvasContainer.scrollTop = canvasContainer.scrollHeight;
-        });
-      }
-    } else {
-      wheelAccumulator = 0;
     }
   }
 
@@ -1515,27 +1621,6 @@
         lastMoveY = pos.y;
       }
 
-      const pageH = (overlayCanvas?.height || 1000) / (activeDoc.scale || 1.0);
-      const now = Date.now();
-
-      // If dragged past bottom boundary of current page canvas, move to next page
-      if (pos.y > pageH + 15 && activeDoc.currentPage < activeDoc.pageCount && now - lastDragPageTime > 500) {
-        lastDragPageTime = now;
-        transferSelectedToPage(activeDoc.currentPage + 1, "top");
-        lastMoveX = pos.x;
-        lastMoveY = pos.y;
-        return;
-      }
-
-      // If dragged past top boundary of current page canvas, move to previous page
-      if (pos.y < -15 && activeDoc.currentPage > 1 && now - lastDragPageTime > 500) {
-        lastDragPageTime = now;
-        transferSelectedToPage(activeDoc.currentPage - 1, "bottom");
-        lastMoveX = pos.x;
-        lastMoveY = pos.y;
-        return;
-      }
-
       const dx = pos.x - lastMoveX;
       const dy = pos.y - lastMoveY;
       if (dx !== 0 || dy !== 0) didMoveItem = true;
@@ -1754,17 +1839,34 @@
     }
 
     if (isDraggingItem && selectedAnnotationIds.length > 0) {
-      // Check if cursor is hovering over a sidebar thumbnail
+      // 1. Check if cursor is hovering over a sidebar thumbnail
       const thumbEl = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest("[data-page-thumb]");
       if (thumbEl) {
         const pNum = Number(thumbEl.getAttribute("data-page-thumb"));
         if (pNum && pNum >= 1 && pNum <= activeDoc.pageCount) {
           dragOverSidebarPage = pNum;
-        } else {
-          dragOverSidebarPage = null;
+          return;
         }
-      } else {
-        dragOverSidebarPage = null;
+      }
+      dragOverSidebarPage = null;
+
+      // 2. Viewport edge auto-scrolling
+      if (canvasContainer) {
+        const cr = canvasContainer.getBoundingClientRect();
+        const topDist = e.clientY - cr.top;
+        const botDist = cr.bottom - e.clientY;
+        if (topDist > 0 && topDist < 70) {
+          canvasContainer.scrollTop -= Math.max(5, (70 - topDist) / 3);
+        } else if (botDist > 0 && botDist < 70) {
+          canvasContainer.scrollTop += Math.max(5, (70 - botDist) / 3);
+        }
+      }
+
+      // 3. Check if cursor crossed into another page in continuous mode
+      const targetPage = getPageUnderCursor(e.clientX, e.clientY);
+      if (targetPage && targetPage !== activeDoc.currentPage) {
+        transferDraggedItemToPage(targetPage, e.clientX, e.clientY);
+        return;
       }
 
       onMouseMove(e);
@@ -1780,7 +1882,10 @@
         const targetPage = dragOverSidebarPage;
         dragOverSidebarPage = null;
         transferSelectedToPage(targetPage, "current");
+        isDraggingItem = false;
+        isPointerDown = false;
         pushToast(`Nesne Sayfa ${targetPage}'e aktarıldı`, "success");
+        document.getElementById(`continuous-page-${targetPage}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         return;
       }
       dragOverSidebarPage = null;
@@ -3448,25 +3553,7 @@
           {/if}
         </div>
 
-        <div class="h-4 w-px bg-zinc-200 dark:bg-zinc-800"></div>
 
-        <!-- Görünüm Modu: Tek Sayfa / Sürekli Kaydırma -->
-        <button
-          class="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-all {viewLayout === 'continuous' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 font-semibold' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'}"
-          title={viewLayout === 'continuous' ? 'Tek Sayfa Görünümüne Geç' : 'Sürekli Kaydırma Görünümüne Geç'}
-          on:click={() => {
-            viewLayout = viewLayout === 'single' ? 'continuous' : 'single';
-            if (viewLayout === 'single') {
-              tick().then(renderCurrentPage);
-            } else {
-              visiblePageRange = { start: Math.max(1, activeDoc.currentPage - 2), end: Math.min(activeDoc.pageCount, activeDoc.currentPage + 2) };
-              tick().then(() => document.getElementById(`continuous-page-${activeDoc.currentPage}`)?.scrollIntoView());
-            }
-          }}
-        >
-          <Layers size={14} />
-          <span>{viewLayout === 'continuous' ? 'Sürekli' : 'Tek Sayfa'}</span>
-        </button>
 
         <!-- Okuma Modu / Tam Ekran (F11) -->
         <button
@@ -3633,7 +3720,7 @@
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div
         bind:this={canvasContainer}
-        on:wheel={viewLayout === 'single' ? handleContainerWheel : undefined}
+        on:wheel={handleContainerWheel}
         on:scroll={handleContinuousScroll}
         on:mousedown={handleContainerMouseDown}
         on:auxclick={(e) => { if (e.button === 1) e.preventDefault(); }}
@@ -3668,7 +3755,7 @@
           </div>
         {/if}
 
-        {#if viewLayout === "continuous" && activeDoc}
+        {#if activeDoc}
           <div class="flex flex-col items-center py-4">
             {#each Array.from({ length: activeDoc.pageCount }, (_, i) => i + 1) as p (p)}
               <ContinuousPage
@@ -3678,172 +3765,115 @@
                 isVisible={p >= visiblePageRange.start && p <= visiblePageRange.end}
                 isCurrentPage={p === activeDoc.currentPage}
                 annotations={activeDoc.annotations[p] || []}
-                onSelectPage={(selectedP) => {
-                  if (activeDoc && selectedP !== activeDoc.currentPage) {
-                    updateDocPage(activeDoc.id, selectedP);
-                  }
-                }}
+                onSelectPage={handlePageSelect}
                 onLinkClick={handleLinkClick}
-              />
+                let:pagePixelWidth
+                let:pagePixelHeight
+              >
+                {#if p === activeDoc.currentPage}
+                  <!-- Interactive AcroForm Fields -->
+                  {#if currentFormFields.length > 0}
+                    <div class="absolute inset-0 pointer-events-none z-10">
+                      {#each currentFormFields as field}
+                        {#if field.type === "checkbox"}
+                          <input
+                            type="checkbox"
+                            class="absolute pointer-events-auto cursor-pointer rounded text-indigo-600 focus:ring-indigo-500 border-zinc-400"
+                            style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
+                            checked={docFormValues[field.name] === "Yes" || (!docFormValues[field.name] && field.value === "Yes")}
+                            disabled={field.readOnly}
+                            on:change={(e) => {
+                              docFormValues[field.name] = e.currentTarget.checked ? "Yes" : "Off";
+                              if (activeDoc) markDocumentModified(activeDoc.id);
+                            }}
+                          />
+                        {:else}
+                          <input
+                            type="text"
+                            class="absolute pointer-events-auto rounded bg-blue-50/40 hover:bg-white focus:bg-white px-1 py-0.5 text-xs text-zinc-900 border border-blue-400/60 focus:border-indigo-600 focus:outline-none shadow-xs transition-colors"
+                            style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px; font-size: {Math.max(9, Math.min(14, (field.rect[3] - field.rect[1]) * 0.7))}px;"
+                            value={docFormValues[field.name] !== undefined ? docFormValues[field.name] : field.value}
+                            placeholder={field.name}
+                            disabled={field.readOnly}
+                            on:input={(e) => {
+                              docFormValues[field.name] = e.currentTarget.value;
+                              if (activeDoc) markDocumentModified(activeDoc.id);
+                            }}
+                          />
+                        {/if}
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <!-- Interactive Overlay Canvas -->
+                  <canvas
+                    bind:this={overlayCanvas}
+                    width={pagePixelWidth}
+                    height={pagePixelHeight}
+                    style="cursor: {canvasCursor}; pointer-events: {overlayPointerEvents};"
+                    class="absolute inset-0 touch-none z-10"
+                    on:mousedown={onMouseDown}
+                    on:mousemove={onMouseMove}
+                    on:mouseup={onMouseUp}
+                    on:mouseenter={() => (isMouseOverCanvas = true)}
+                    on:mouseleave={onMouseLeave}
+                  ></canvas>
+
+                  <!-- Circular Eraser Cursor Preview: Active only for Hassas and Daksil -->
+                  {#if currentTool === "eraser" && (eraserMode === "precision" || eraserMode === "whiteout") && isMouseOverCanvas && eraserClientPos}
+                    <div
+                      class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 {eraserMode === 'whiteout' ? 'border-amber-500 bg-white/40' : 'border-indigo-600 bg-indigo-500/20'} shadow-xs flex items-center justify-center z-20"
+                      style="left: {eraserClientPos.x}px; top: {eraserClientPos.y}px; width: {eraserDisplayDiameter}px; height: {eraserDisplayDiameter}px;"
+                    >
+                      <div class="h-1 w-1 rounded-full {eraserMode === 'whiteout' ? 'bg-amber-500' : 'bg-indigo-600'}"></div>
+                    </div>
+                  {/if}
+
+                  <!-- Floating Inline Text Input: Uses exact CSS coordinates & reliable keyboard / button confirm -->
+                  {#if textInputVisible}
+                    <div
+                      class="absolute z-30 flex items-center gap-1 rounded-xl border-2 border-purple-500 p-1.5 shadow-xl backdrop-blur-md"
+                      style="left: {textInputCssX}px; top: {textInputCssY}px; background-color: rgba(255, 255, 255, 0.85);"
+                    >
+                      <input
+                        bind:this={textInputRef}
+                        bind:value={textInputVal}
+                        placeholder="Metin yazın..."
+                        class="rounded border-none bg-transparent px-2 py-0.5 font-medium outline-none text-zinc-900"
+                        style="font-size: {currentFontSize}px; color: {currentColor}; font-family: sans-serif;"
+                        on:keydown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitTextInput();
+                          }
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            textInputVisible = false;
+                            textInputVal = "";
+                          }
+                        }}
+                      />
+                      <button
+                        class="rounded-lg p-1 text-emerald-600 hover:bg-emerald-100/60"
+                        title="Onayla (Enter)"
+                        on:mousedown|stopPropagation|preventDefault
+                        on:click|stopPropagation={commitTextInput}
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        class="rounded-lg p-1 text-rose-500 hover:bg-rose-100/60"
+                        title="İptal (Esc)"
+                        on:mousedown|stopPropagation|preventDefault
+                        on:click|stopPropagation={() => { textInputVisible = false; textInputVal = ""; }}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  {/if}
+                {/if}
+              </ContinuousPage>
             {/each}
-          </div>
-        {:else if activeDoc}
-          <div class="min-w-fit min-h-fit flex flex-col items-center justify-center m-auto">
-            <!-- Page Header Strip / Distinction -->
-            <div class="w-full flex items-center justify-between pb-2 px-1 text-xs select-none">
-              <div class="flex items-center gap-2">
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-semibold shadow-xs border border-zinc-200/80 dark:border-zinc-700/80">
-                  <FileText size={12} class="text-indigo-600 dark:text-indigo-400" />
-                  Sayfa {activeDoc.currentPage} / {activeDoc.pageCount}
-                </span>
-                {#if activeDoc.currentPage > 1}
-                  <span class="text-[11px] text-zinc-400 dark:text-zinc-500 hidden sm:inline">
-                    ↑ Önceki: Sayfa {activeDoc.currentPage - 1}
-                  </span>
-                {/if}
-              </div>
-              {#if activeDoc.currentPage < activeDoc.pageCount}
-                <span class="text-[11px] text-zinc-400 dark:text-zinc-500 hidden sm:inline">
-                  ↓ Sonraki: Sayfa {activeDoc.currentPage + 1}
-                </span>
-              {/if}
-            </div>
-
-            <div
-              class="relative shadow-2xl rounded transition-all duration-200 ease-out {pageTransitionClass}"
-              on:mousemove={handleWrapperMouseMove}
-            >
-              <canvas bind:this={pdfCanvas} class="block rounded bg-white"></canvas>
-
-              <!-- Text Layer (Transparent Selectable Text) -->
-              <div bind:this={textLayerDiv} class="textLayer absolute inset-0 select-text"></div>
-
-              <!-- Clickable Hyperlinks -->
-              <div class="absolute inset-0 pointer-events-none">
-                {#each currentLinks as link}
-                  <button
-                    type="button"
-                    class="absolute pointer-events-auto cursor-pointer rounded-xs bg-indigo-500/10 hover:bg-indigo-500/25 transition-colors border border-transparent hover:border-indigo-500/40"
-                    style="left: {link.rect[0]}px; top: {link.rect[1]}px; width: {link.rect[2] - link.rect[0]}px; height: {link.rect[3] - link.rect[1]}px;"
-                    title={link.url ? link.url : link.destPage ? `Sayfa ${link.destPage}'e git` : 'Bağlantı'}
-                    on:click={(e) => handleLinkClick(link, e)}
-                  ></button>
-                {/each}
-              </div>
-
-              <!-- Interactive AcroForm Fields -->
-              {#if currentFormFields.length > 0}
-                <div class="absolute inset-0 pointer-events-none z-10">
-                  {#each currentFormFields as field}
-                    {#if field.type === "checkbox"}
-                      <input
-                        type="checkbox"
-                        class="absolute pointer-events-auto cursor-pointer rounded text-indigo-600 focus:ring-indigo-500 border-zinc-400"
-                        style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
-                        checked={docFormValues[field.name] === "Yes" || (!docFormValues[field.name] && field.value === "Yes")}
-                        disabled={field.readOnly}
-                        on:change={(e) => {
-                          docFormValues[field.name] = e.currentTarget.checked ? "Yes" : "Off";
-                          if (activeDoc) markDocumentModified(activeDoc.id);
-                        }}
-                      />
-                    {:else}
-                      <input
-                        type="text"
-                        class="absolute pointer-events-auto rounded bg-blue-50/40 hover:bg-white focus:bg-white px-1 py-0.5 text-xs text-zinc-900 border border-blue-400/60 focus:border-indigo-600 focus:outline-none shadow-xs transition-colors"
-                        style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px; font-size: {Math.max(9, Math.min(14, (field.rect[3] - field.rect[1]) * 0.7))}px;"
-                        value={docFormValues[field.name] !== undefined ? docFormValues[field.name] : field.value}
-                        placeholder={field.name}
-                        disabled={field.readOnly}
-                        on:input={(e) => {
-                          docFormValues[field.name] = e.currentTarget.value;
-                          if (activeDoc) markDocumentModified(activeDoc.id);
-                        }}
-                      />
-                    {/if}
-                  {/each}
-                </div>
-              {/if}
-
-
-              <canvas
-                bind:this={overlayCanvas}
-                style="cursor: {canvasCursor}; pointer-events: {overlayPointerEvents};"
-                class="absolute inset-0 touch-none"
-                on:mousedown={onMouseDown}
-                on:mousemove={onMouseMove}
-                on:mouseup={onMouseUp}
-                on:mouseenter={() => (isMouseOverCanvas = true)}
-                on:mouseleave={onMouseLeave}
-              ></canvas>
-
-              <!-- Circular Eraser Cursor Preview: Active only for Hassas and Daksil -->
-              {#if currentTool === "eraser" && (eraserMode === "precision" || eraserMode === "whiteout") && isMouseOverCanvas && eraserClientPos}
-                <div
-                  class="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 {eraserMode === 'whiteout' ? 'border-amber-500 bg-white/40' : 'border-indigo-600 bg-indigo-500/20'} shadow-xs flex items-center justify-center z-20"
-                  style="left: {eraserClientPos.x}px; top: {eraserClientPos.y}px; width: {eraserDisplayDiameter}px; height: {eraserDisplayDiameter}px;"
-                >
-                  <div class="h-1 w-1 rounded-full {eraserMode === 'whiteout' ? 'bg-amber-500' : 'bg-indigo-600'}"></div>
-                </div>
-              {/if}
-
-              <!-- Floating Inline Text Input: Uses exact CSS coordinates & reliable keyboard / button confirm -->
-              {#if textInputVisible}
-                <div
-                  class="absolute z-30 flex items-center gap-1 rounded-xl border-2 border-purple-500 p-1.5 shadow-xl backdrop-blur-md"
-                  style="left: {textInputCssX}px; top: {textInputCssY}px; background-color: rgba(255, 255, 255, 0.85);"
-                >
-                  <input
-                    bind:this={textInputRef}
-                    bind:value={textInputVal}
-                    placeholder="Metin yazın..."
-                    class="rounded border-none bg-transparent px-2 py-0.5 font-medium outline-none text-zinc-900"
-                    style="font-size: {currentFontSize}px; color: {currentColor}; font-family: sans-serif;"
-                    on:keydown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        commitTextInput();
-                      }
-                      if (e.key === "Escape") {
-                        e.preventDefault();
-                        textInputVisible = false;
-                        textInputVal = "";
-                      }
-                    }}
-                  />
-                  <button
-                    class="rounded-lg p-1 text-emerald-600 hover:bg-emerald-100/60"
-                    title="Onayla (Enter)"
-                    on:mousedown|stopPropagation|preventDefault
-                    on:click|stopPropagation={commitTextInput}
-                  >
-                    <Check size={16} />
-                  </button>
-                  <button
-                    class="rounded-lg p-1 text-rose-500 hover:bg-rose-100/60"
-                    title="İptal (Esc)"
-                    on:mousedown|stopPropagation|preventDefault
-                    on:click|stopPropagation={() => { textInputVisible = false; textInputVal = ""; }}
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              {/if}
-            </div>
-
-            <!-- Page Footer Strip / Boundary Separator -->
-            <div class="w-full flex items-center justify-center pt-3 mt-1 text-[11px] select-none text-zinc-400 dark:text-zinc-500">
-              <div class="flex items-center gap-2">
-                <div class="h-px w-10 bg-zinc-300 dark:bg-zinc-700"></div>
-                <span>Sayfa {activeDoc.currentPage} Sonu</span>
-                {#if activeDoc.currentPage < activeDoc.pageCount}
-                  <span class="text-zinc-500 dark:text-zinc-400 font-medium">(Aşağı kaydırarak veya nesneyi alta sürükleyerek s. {activeDoc.currentPage + 1}'e geçin)</span>
-                {:else}
-                  <span class="text-emerald-600 dark:text-emerald-400 font-medium">✓ Belge Sonu</span>
-                {/if}
-                <div class="h-px w-10 bg-zinc-300 dark:bg-zinc-700"></div>
-              </div>
-            </div>
           </div>
         {/if}
       </div>

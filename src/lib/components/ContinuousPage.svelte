@@ -10,7 +10,7 @@
   export let isVisible: boolean = false;
   export let isCurrentPage: boolean = false;
   export let annotations: Annotation[] = [];
-  export let onSelectPage: (p: number) => void;
+  export let onSelectPage: (p: number, e?: MouseEvent) => void;
   export let onLinkClick: (link: PdfLink) => void;
 
   let canvasEl: HTMLCanvasElement | null = null;
@@ -41,7 +41,7 @@
   }
 
   async function renderPageContent() {
-    if (!canvasEl || !overlayEl) return;
+    if (!canvasEl) return;
     try {
       const rendered = await handle.renderPage(page, scale);
       canvasEl.width = rendered.width;
@@ -49,9 +49,13 @@
       const ctx = canvasEl.getContext("2d")!;
       ctx.drawImage(rendered, 0, 0);
 
-      overlayEl.width = rendered.width;
-      overlayEl.height = rendered.height;
-      drawAnnotations(overlayEl, annotations, scale);
+      if (overlayEl) {
+        overlayEl.width = rendered.width;
+        overlayEl.height = rendered.height;
+        if (!isCurrentPage) {
+          drawAnnotations(overlayEl, annotations, scale);
+        }
+      }
 
       if (textLayerEl) {
         textLayerEl.style.width = `${rendered.width}px`;
@@ -74,7 +78,12 @@
   }
 
   $: if (isRendered && overlayEl && annotations) {
-    drawAnnotations(overlayEl, annotations, scale);
+    if (!isCurrentPage) {
+      drawAnnotations(overlayEl, annotations, scale);
+    } else {
+      const ctx = overlayEl.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, overlayEl.width, overlayEl.height);
+    }
   }
 
   function drawAnnotations(canvas: HTMLCanvasElement, list: Annotation[], s: number) {
@@ -194,8 +203,12 @@
 <div
   id="continuous-page-{page}"
   data-page={page}
-  class="relative mb-6 flex flex-col items-center transition-all cursor-pointer {isCurrentPage ? 'ring-2 ring-indigo-500/80 rounded-lg p-1 bg-indigo-50/20 dark:bg-indigo-950/20' : 'p-1'}"
-  on:mousedown={() => onSelectPage(page)}
+  class="relative mb-6 flex flex-col items-center transition-all {isCurrentPage ? 'ring-2 ring-indigo-500/80 rounded-lg p-1 bg-indigo-50/20 dark:bg-indigo-950/20' : 'p-1 cursor-pointer'}"
+  on:mousedown={(e) => {
+    if (!isCurrentPage) {
+      onSelectPage(page, e);
+    }
+  }}
 >
   <!-- Page Header Tag -->
   <div class="mb-1.5 flex items-center justify-between w-full max-w-full px-2 text-[11px] text-zinc-400 dark:text-zinc-500 select-none">
@@ -211,7 +224,7 @@
 
   <!-- Page Viewport Container -->
   <div
-    class="relative rounded bg-white shadow-xl overflow-hidden"
+    class="relative rounded bg-white shadow-xl"
     style="width: {pagePixelWidth}px; height: {pagePixelHeight}px; min-width: {pagePixelWidth}px; min-height: {pagePixelHeight}px;"
   >
     {#if isVisible}
@@ -233,8 +246,16 @@
         {/each}
       </div>
 
-      <!-- Overlay Canvas for annotations -->
-      <canvas bind:this={overlayEl} class="absolute inset-0 pointer-events-none"></canvas>
+      <!-- Overlay Canvas for passive annotations when not active -->
+      <canvas
+        bind:this={overlayEl}
+        class="absolute inset-0 pointer-events-none {isCurrentPage ? 'hidden' : ''}"
+      ></canvas>
+
+      <!-- Interactive slot for active page -->
+      {#if isCurrentPage}
+        <slot {pagePixelWidth} {pagePixelHeight} />
+      {/if}
     {:else}
       <!-- Virtual Windowing Skeleton Placeholder -->
       <div class="flex h-full w-full flex-col items-center justify-center bg-zinc-50 text-zinc-300 dark:bg-zinc-900 dark:text-zinc-700 select-none">

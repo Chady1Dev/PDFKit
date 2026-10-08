@@ -208,10 +208,15 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
           tx > lastXEnd + 3 &&
           !text.endsWith(" ") &&
           !text.endsWith("\n") &&
+          !text.endsWith("\t") &&
           !str.startsWith(" ")
         ) {
-          // Horizontal gap between words
-          text += " ";
+          // Horizontal gap: if gap is large (>15pt), treat as column separator tab
+          if (tx > lastXEnd + 15) {
+            text += "\t";
+          } else {
+            text += " ";
+          }
         }
 
         text += str;

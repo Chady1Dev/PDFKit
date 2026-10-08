@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use zip::write::{SimpleFileOptions, ZipWriter};
 use zip::CompressionMethod;
 
@@ -180,21 +180,87 @@ fn generate_docx(
 </w:p>"#,
             );
         } else {
-            for line in p.text.lines() {
-                let trimmed_line = line.trim();
-                if trimmed_line.is_empty() {
-                    body.push_str("<w:p/>\n");
-                } else {
-                    body.push_str(&format!(
-                        r#"<w:p>
+        let lines: Vec<&str> = p.text.lines().collect();
+        let mut line_idx = 0;
+        while line_idx < lines.len() {
+            let line = lines[line_idx];
+            let trimmed_line = line.trim();
+            if trimmed_line.is_empty() {
+                body.push_str("<w:p/>\n");
+                line_idx += 1;
+                continue;
+            }
+
+            // Check if this line has tabs indicating a table
+            if line.contains('\t') {
+                let mut tbl_rows = Vec::new();
+                while line_idx < lines.len() && lines[line_idx].contains('\t') {
+                    let row_cols: Vec<&str> = lines[line_idx].split('\t').map(|s| s.trim()).collect();
+                    tbl_rows.push(row_cols);
+                    line_idx += 1;
+                }
+
+                body.push_str(r#"<w:tbl>
+  <w:tblPr>
+    <w:tblW w:w="0" w:type="auto"/>
+    <w:tblBorders>
+      <w:top w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/>
+      <w:left w:val="none"/>
+      <w:bottom w:val="single" w:sz="6" w:space="0" w:color="94A3B8"/>
+      <w:right w:val="none"/>
+      <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>
+      <w:insideV w:val="none"/>
+    </w:tblBorders>
+  </w:tblPr>
+"#);
+                for (r_i, row) in tbl_rows.iter().enumerate() {
+                    let is_hdr = r_i == 0;
+                    body.push_str("<w:tr>\n");
+                    for cell in row {
+                        let fill_xml = if is_hdr { r#"<w:shd w:val="clear" w:color="auto" w:fill="F1F5F9"/>"# } else { "" };
+                        let b_xml = if is_hdr { "<w:b/>" } else { "" };
+                        let color_xml = if is_hdr { r#"<w:color w:val="1E40AF"/>"# } else { "" };
+                        body.push_str(&format!(
+                            r#"<w:tc>
+  <w:tcPr>
+    <w:tcMar>
+      <w:top w:w="120" w:type="dxa"/>
+      <w:bottom w:w="120" w:type="dxa"/>
+      <w:left w:w="140" w:type="dxa"/>
+      <w:right w:w="140" w:type="dxa"/>
+    </w:tcMar>
+    {}
+  </w:tcPr>
+  <w:p>
+    <w:r>
+      <w:rPr>{}{}</w:rPr>
+      <w:t xml:space="preserve">{}</w:t>
+    </w:r>
+  </w:p>
+</w:tc>
+"#,
+                            fill_xml,
+                            b_xml,
+                            color_xml,
+                            escape_xml(cell)
+                        ));
+                    }
+                    body.push_str("</w:tr>\n");
+                }
+                body.push_str("</w:tbl>\n<w:p/>\n");
+            } else {
+                body.push_str(&format!(
+                    r#"<w:p>
   <w:r>
     <w:t xml:space="preserve">{}</w:t>
   </w:r>
-</w:p>"#,
-                        escape_xml(line)
-                    ));
-                }
+</w:p>
+"#,
+                    escape_xml(line)
+                ));
+                line_idx += 1;
             }
+        }
         }
 
         // Insert page break between PDF pages
@@ -269,46 +335,44 @@ fn generate_xlsx(
     zip.start_file("xl/_rels/workbook.xml.rels", options)?;
     zip.write_all(wb_rels.as_bytes())?;
 
-    // 4. xl/styles.xml
+    // 4. xl/styles.xml - 100% compliant OpenXML with cellStyles
     let styles = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="2">
-    <font>
-      <sz val="11"/>
-      <name val="Calibri"/>
-    </font>
-    <font>
-      <b/>
-      <sz val="11"/>
-      <color rgb="FFFFFFFF"/>
-      <name val="Calibri"/>
-    </font>
+  <fonts count="3">
+    <font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="12"/><color rgb="FF1E40AF"/><name val="Calibri"/><family val="2"/></font>
   </fonts>
-  <fills count="3">
+  <fills count="4">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF1E40AF"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF2563EB"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF1F5F9"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
   <borders count="2">
     <border><left/><right/><top/><bottom/><diagonal/></border>
     <border>
-      <left style="thin"><color rgb="FFD1D5DB"/></left>
-      <right style="thin"><color rgb="FFD1D5DB"/></right>
-      <top style="thin"><color rgb="FFD1D5DB"/></top>
-      <bottom style="thin"><color rgb="FFD1D5DB"/></bottom>
+      <left style="thin"><color rgb="FFE2E8F0"/></left>
+      <right style="thin"><color rgb="FFE2E8F0"/></right>
+      <top style="thin"><color rgb="FFE2E8F0"/></top>
+      <bottom style="thin"><color rgb="FFE2E8F0"/></bottom>
       <diagonal/>
     </border>
   </borders>
   <cellStyleXfs count="1">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
   </cellStyleXfs>
-  <cellXfs count="3">
+  <cellXfs count="4">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
       <alignment horizontal="center" vertical="center"/>
     </xf>
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
   </cellXfs>
+  <cellStyles count="1">
+    <cellStyle name="Normal" xfId="0" builtinId="0"/>
+  </cellStyles>
 </styleSheet>"#;
     zip.start_file("xl/styles.xml", options)?;
     zip.write_all(styles.as_bytes())?;
@@ -318,7 +382,7 @@ fn generate_xlsx(
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="Sayfa 1" sheetId="1" r:id="rId1"/>
+    <sheet name="PDF Verileri" sheetId="1" r:id="rId1"/>
   </sheets>
 </workbook>"#;
     zip.start_file("xl/workbook.xml", options)?;
@@ -326,84 +390,83 @@ fn generate_xlsx(
 
     // 6. xl/worksheets/sheet1.xml
     let mut sheet_data = String::new();
+    let mut max_col_used = 1;
+    let mut row_idx: usize = 1;
 
-    // Header Row (Row 1)
-    sheet_data.push_str(
-        r#"<row r="1" ht="24" customHeight="1">
-  <c r="A1" s="1" t="inlineStr"><is><t>Sayfa</t></is></c>
-  <c r="B1" s="1" t="inlineStr"><is><t>Satır No</t></is></c>
-  <c r="C1" s="1" t="inlineStr"><is><t>Metin İçeriği</t></is></c>
-</row>"#,
-    );
-
-    let mut row_idx: usize = 2;
-    for p in pages {
-        let lines: Vec<&str> = p.text.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
-        if lines.is_empty() {
+    for (p_idx, p) in pages.iter().enumerate() {
+        if pages.len() > 1 {
             sheet_data.push_str(&format!(
-                r#"<row r="{row}">
-  <c r="A{row}" s="2"><v>{page}</v></c>
-  <c r="B{row}" s="2"><v>1</v></c>
-  <c r="C{row}" s="2" t="inlineStr"><is><t>(Boş veya Salt Görsel Sayfa)</t></is></c>
+                r#"<row r="{row}" ht="22" customHeight="1">
+  <c r="A{row}" s="3" t="inlineStr"><is><t>--- Sayfa {} ---</t></is></c>
 </row>"#,
-                row = row_idx,
-                page = p.page
+                p.page,
+                row = row_idx
             ));
             row_idx += 1;
-        } else {
-            for (line_num, line) in lines.iter().enumerate() {
-                // If line contains tab characters, split into multiple columns
-                let cols: Vec<&str> = line.split('\t').collect();
-                if cols.len() > 1 {
-                    sheet_data.push_str(&format!(
-                        r#"<row r="{row}">
-  <c r="A{row}" s="2"><v>{page}</v></c>
-  <c r="B{row}" s="2"><v>{line_num}</v></c>"#,
-                        row = row_idx,
-                        page = p.page,
-                        line_num = line_num + 1
-                    ));
-                    for (c_idx, col_val) in cols.iter().enumerate() {
-                        let c_letter = col_letter(2 + c_idx);
-                        sheet_data.push_str(&format!(
-                            r#"<c r="{letter}{row}" s="2" t="inlineStr"><is><t xml:space="preserve">{val}</t></is></c>"#,
-                            letter = c_letter,
-                            row = row_idx,
-                            val = escape_xml(col_val.trim())
-                        ));
-                    }
-                    sheet_data.push_str("</row>");
-                } else {
-                    sheet_data.push_str(&format!(
-                        r#"<row r="{row}">
-  <c r="A{row}" s="2"><v>{page}</v></c>
-  <c r="B{row}" s="2"><v>{line_num}</v></c>
-  <c r="C{row}" s="2" t="inlineStr"><is><t xml:space="preserve">{val}</t></is></c>
-</row>"#,
-                        row = row_idx,
-                        page = p.page,
-                        line_num = line_num + 1,
-                        val = escape_xml(line)
-                    ));
-                }
-                row_idx += 1;
-            }
         }
+
+        let lines: Vec<&str> = p.text.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        for line in lines {
+            let cols: Vec<&str> = line.split('\t').collect();
+            if cols.len() > max_col_used {
+                max_col_used = cols.len();
+            }
+
+            sheet_data.push_str(&format!(r#"<row r="{row}" ht="19" customHeight="1">"#, row = row_idx));
+            for (c_idx, col_val) in cols.iter().enumerate() {
+                let letter = col_letter(c_idx);
+                let trimmed_val = col_val.trim();
+                sheet_data.push_str(&format!(
+                    r#"<c r="{letter}{row}" s="2" t="inlineStr"><is><t xml:space="preserve">{val}</t></is></c>"#,
+                    letter = letter,
+                    row = row_idx,
+                    val = escape_xml(trimmed_val)
+                ));
+            }
+            sheet_data.push_str("</row>");
+            row_idx += 1;
+        }
+
+        if p_idx < pages.len() - 1 {
+            row_idx += 1;
+        }
+    }
+
+    if row_idx == 1 {
+        sheet_data.push_str(
+            r#"<row r="1" ht="20" customHeight="1"><c r="A1" s="2" t="inlineStr"><is><t>(Belgede metin bulunamadı veya salt görsel içeriklidir)</t></is></c></row>"#,
+        );
+        row_idx = 2;
+    }
+
+    let end_col = col_letter(max_col_used.saturating_sub(1));
+    let end_row = row_idx.saturating_sub(1).max(1);
+
+    let mut col_tags = String::new();
+    let num_cols = max_col_used.max(4);
+    for c in 1..=num_cols {
+        col_tags.push_str(&format!(r#"<col min="{c}" max="{c}" width="22" customWidth="1"/>"#));
     }
 
     let worksheet = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:{end_col}{end_row}"/>
+  <sheetViews>
+    <sheetView tabSelected="1" workbookViewId="0"/>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="16"/>
   <cols>
-    <col min="1" max="1" width="10" customWidth="1"/>
-    <col min="2" max="2" width="10" customWidth="1"/>
-    <col min="3" max="3" width="90" customWidth="1"/>
+    {col_tags}
   </cols>
   <sheetData>
-    {}
+    {sheet_data}
   </sheetData>
 </worksheet>"#,
-        sheet_data
+        end_col = end_col,
+        end_row = end_row,
+        col_tags = col_tags,
+        sheet_data = sheet_data
     );
 
     zip.start_file("xl/worksheets/sheet1.xml", options)?;
@@ -413,219 +476,115 @@ fn generate_xlsx(
     Ok(())
 }
 
-/// Builds a 100% valid OpenXML PPTX archive
+static BLANK_PPTX: &[u8] = include_bytes!("../../templates/blank.pptx");
+
+/// Builds a 100% valid OpenXML PPTX archive using the validated base presentation package
 fn generate_pptx(
     output_path: &Path,
     pages: &[PageTextData],
     language: &str,
 ) -> Result<(), PdfError> {
-    let file = File::create(output_path)?;
-    let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    use std::io::{Cursor, Read};
+    use zip::ZipArchive;
 
     let lang_tag = if language == "en" { "en-US" } else { "tr-TR" };
     let slide_count = if pages.is_empty() { 1 } else { pages.len() };
 
-    // 1. [Content_Types].xml
-    let mut slide_overrides = String::new();
-    for i in 1..=slide_count {
-        slide_overrides.push_str(&format!(
-            r#"  <Override PartName="/ppt/slides/slide{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>
-"#
-        ));
+    let template_cursor = Cursor::new(BLANK_PPTX);
+    let mut template_archive = ZipArchive::new(template_cursor)
+        .map_err(|e| PdfError::Custom(format!("PPTX template error: {}", e)))?;
+
+    let out_file = File::create(output_path)?;
+    let mut zip = ZipWriter::new(out_file);
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    let mut content_types = String::new();
+    let mut pres_rels = String::new();
+    let mut presentation_xml = String::new();
+
+    for i in 0..template_archive.len() {
+        let mut file = template_archive.by_index(i)
+            .map_err(|e| PdfError::Custom(format!("PPTX template read error: {}", e)))?;
+        let name = file.name().to_string();
+
+        if name == "[Content_Types].xml" {
+            file.read_to_string(&mut content_types)?;
+        } else if name == "ppt/_rels/presentation.xml.rels" {
+            file.read_to_string(&mut pres_rels)?;
+        } else if name == "ppt/presentation.xml" {
+            file.read_to_string(&mut presentation_xml)?;
+        } else {
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf)?;
+            zip.start_file(&name, options)?;
+            zip.write_all(&buf)?;
+        }
     }
 
-    let content_types = format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
-  <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
-  <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
-  <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
-{}</Types>"#,
-        slide_overrides
-    );
+    // 1. Modify [Content_Types].xml to register slides
+    let mut overrides = String::new();
+    for i in 1..=slide_count {
+        overrides.push_str(&format!(
+            r#"<Override PartName="/ppt/slides/slide{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>"#
+        ));
+    }
+    content_types = content_types.replace("</Types>", &format!("{overrides}</Types>"));
     zip.start_file("[Content_Types].xml", options)?;
     zip.write_all(content_types.as_bytes())?;
 
-    // 2. _rels/.rels
-    let root_rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
-</Relationships>"#;
-    zip.start_file("_rels/.rels", options)?;
-    zip.write_all(root_rels.as_bytes())?;
-
-    // 3. ppt/_rels/presentation.xml.rels
-    let mut pres_rels = String::new();
-    pres_rels.push_str(
-        r#"  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
-"#,
-    );
-    for i in 1..=slide_count {
-        pres_rels.push_str(&format!(
-            r#"  <Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{i}.xml"/>
-"#,
-            i + 1
-        ));
+    // 2. Modify ppt/_rels/presentation.xml.rels to link slides
+    let mut max_rid = 7;
+    for cap in pres_rels.split("rId").skip(1) {
+        let num_str: String = cap.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(num) = num_str.parse::<u32>() {
+            if num > max_rid {
+                max_rid = num;
+            }
+        }
     }
-    let pres_rels_xml = format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-{}</Relationships>"#,
-        pres_rels
-    );
+
+    let mut slide_rids = Vec::new();
+    let mut slide_rel_tags = String::new();
+    for i in 1..=slide_count {
+        let rid_val = max_rid + i as u32;
+        let rid_str = format!("rId{}", rid_val);
+        slide_rel_tags.push_str(&format!(
+            r#"<Relationship Id="{rid_str}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{i}.xml"/>"#
+        ));
+        slide_rids.push(rid_str);
+    }
+    pres_rels = pres_rels.replace("</Relationships>", &format!("{slide_rel_tags}</Relationships>"));
     zip.start_file("ppt/_rels/presentation.xml.rels", options)?;
-    zip.write_all(pres_rels_xml.as_bytes())?;
+    zip.write_all(pres_rels.as_bytes())?;
 
-    // 4. ppt/presentation.xml
-    let mut sld_id_lst = String::new();
-    for i in 1..=slide_count {
-        sld_id_lst.push_str(&format!(
-            r#"    <p:sldId id="{}" r:id="rId{}"/>
-"#,
-            255 + i,
-            i + 1
+    // 3. Modify ppt/presentation.xml to add <p:sldIdLst>
+    let mut sld_id_items = String::new();
+    for (idx, rid_str) in slide_rids.iter().enumerate() {
+        sld_id_items.push_str(&format!(
+            r#"<p:sldId id="{}" r:id="{}"/>"#,
+            256 + idx + 1,
+            rid_str
         ));
     }
-    let presentation_xml = format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-                xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:sldMasterIdLst>
-    <p:sldMasterId id="2147483648" r:id="rId1"/>
-  </p:sldMasterIdLst>
-  <p:sldIdLst>
-{}  </p:sldIdLst>
-  <p:sldSz cx="12192000" cy="6858000" type="screen16x9"/>
-  <p:notesSz cx="6858000" cy="9144000"/>
-</p:presentation>"#,
-        sld_id_lst
-    );
+    let sld_id_lst = format!("<p:sldIdLst>{}</p:sldIdLst>", sld_id_items);
+    if presentation_xml.contains("<p:sldIdLst>") {
+        if let Some(start) = presentation_xml.find("<p:sldIdLst>") {
+            if let Some(end) = presentation_xml[start..].find("</p:sldIdLst>") {
+                presentation_xml.replace_range(start..start + end + 13, &sld_id_lst);
+            }
+        }
+    } else {
+        presentation_xml = presentation_xml.replace("</p:sldMasterIdLst>", &format!("</p:sldMasterIdLst>{}", sld_id_lst));
+    }
     zip.start_file("ppt/presentation.xml", options)?;
     zip.write_all(presentation_xml.as_bytes())?;
 
-    // 5. ppt/theme/theme1.xml
-    let theme_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme">
-  <a:themeElements>
-    <a:clrScheme name="Office">
-      <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
-      <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
-      <a:dk2><a:srgbClr val="1F497D"/></a:dk2>
-      <a:lt2><a:srgbClr val="EEECE1"/></a:lt2>
-      <a:accent1><a:srgbClr val="4F81BD"/></a:accent1>
-      <a:accent2><a:srgbClr val="C0504D"/></a:accent2>
-      <a:accent3><a:srgbClr val="9BBB59"/></a:accent3>
-      <a:accent4><a:srgbClr val="8064A2"/></a:accent4>
-      <a:accent5><a:srgbClr val="4BACC6"/></a:accent5>
-      <a:accent6><a:srgbClr val="F79646"/></a:accent6>
-      <a:hlink><a:srgbClr val="0000FF"/></a:hlink>
-      <a:folHlink><a:srgbClr val="800080"/></a:folHlink>
-    </a:clrScheme>
-    <a:fontScheme name="Office">
-      <a:majorFont><a:latin typeface="Calibri"/></a:majorFont>
-      <a:minorFont><a:latin typeface="Calibri"/></a:minorFont>
-    </a:fontScheme>
-    <a:fmtScheme name="Office">
-      <a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>
-      <a:lnStyleLst><a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>
-      <a:effectStyleLst><a:effectLst/></a:effectStyleLst>
-      <a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst>
-    </a:fmtScheme>
-  </a:themeElements>
-  <a:objectDefaults/>
-  <a:extraClrSchemeLst/>
-</a:theme>"#;
-    zip.start_file("ppt/theme/theme1.xml", options)?;
-    zip.write_all(theme_xml.as_bytes())?;
-
-    // 6. ppt/slideMasters/_rels/slideMaster1.xml.rels
-    let sm_rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    // 4. Create slides and slide relationships
+    let slide_layout_rel = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout7.xml"/>
 </Relationships>"#;
-    zip.start_file("ppt/slideMasters/_rels/slideMaster1.xml.rels", options)?;
-    zip.write_all(sm_rels.as_bytes())?;
 
-    // 7. ppt/slideMasters/slideMaster1.xml
-    let slide_master = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-             xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:cSld>
-    <p:spTree>
-      <p:nvGrpSpPr>
-        <p:cNvPr id="1" name=""/>
-        <p:cNvGrpSpPr/>
-        <p:nvPr/>
-      </p:nvGrpSpPr>
-      <p:grpSpPr>
-        <a:xfrm>
-          <a:off x="0" y="0"/>
-          <a:ext cx="0" cy="0"/>
-          <a:chOff x="0" y="0"/>
-          <a:chExt cx="0" cy="0"/>
-        </a:xfrm>
-      </p:grpSpPr>
-    </p:spTree>
-  </p:cSld>
-  <p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>
-  <p:sldLayoutIdLst>
-    <p:sldLayoutId id="2147483649" r:id="rId1"/>
-  </p:sldLayoutIdLst>
-  <p:txStyles>
-    <p:titleStyle/>
-    <p:bodyStyle/>
-    <p:otherStyle/>
-  </p:txStyles>
-</p:sldMaster>"#;
-    zip.start_file("ppt/slideMasters/slideMaster1.xml", options)?;
-    zip.write_all(slide_master.as_bytes())?;
-
-    // 7. ppt/slideLayouts/_rels/slideLayout1.xml.rels
-    let sl_rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
-</Relationships>"#;
-    zip.start_file("ppt/slideLayouts/_rels/slideLayout1.xml.rels", options)?;
-    zip.write_all(sl_rels.as_bytes())?;
-
-    // 8. ppt/slideLayouts/slideLayout1.xml
-    let slide_layout = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-             xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
-             type="blank" preserve="1">
-  <p:cSld name="Blank">
-    <p:spTree>
-      <p:nvGrpSpPr>
-        <p:cNvPr id="1" name=""/>
-        <p:cNvGrpSpPr/>
-        <p:nvPr/>
-      </p:nvGrpSpPr>
-      <p:grpSpPr>
-        <a:xfrm>
-          <a:off x="0" y="0"/>
-          <a:ext cx="0" cy="0"/>
-          <a:chOff x="0" y="0"/>
-          <a:chExt cx="0" cy="0"/>
-        </a:xfrm>
-      </p:grpSpPr>
-    </p:spTree>
-  </p:cSld>
-  <p:clrMapOvr>
-    <a:masterClrMapping/>
-  </p:clrMapOvr>
-</p:sldLayout>"#;
-    zip.start_file("ppt/slideLayouts/slideLayout1.xml", options)?;
-    zip.write_all(slide_layout.as_bytes())?;
-
-    // 9. Slides & Slide Rels
     let default_page = PageTextData {
         page: 1,
         text: String::new(),
@@ -636,50 +595,27 @@ fn generate_pptx(
         pages
     };
 
-    let slide_rel_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
-</Relationships>"#;
-
     for (idx, p) in pages_slice.iter().enumerate() {
         let slide_num = idx + 1;
-
-        // Slide rels
         let rel_path = format!("ppt/slides/_rels/slide{}.xml.rels", slide_num);
         zip.start_file(&rel_path, options)?;
-        zip.write_all(slide_rel_xml.as_bytes())?;
+        zip.write_all(slide_layout_rel.as_bytes())?;
 
-        // Slide content
-        let mut paragraphs = String::new();
+        let mut body_paragraphs = String::new();
         let trimmed = p.text.trim();
         if trimmed.is_empty() {
-            paragraphs.push_str(&format!(
-                r#"          <a:p>
-            <a:r>
-              <a:rPr lang="{lang_tag}" sz="1400" i="1">
-                <a:solidFill><a:srgbClr val="6B7280"/></a:solidFill>
-              </a:rPr>
-              <a:t>(Bu sayfa görsel içeriklidir veya metin katmanı içermemektedir)</a:t>
-            </a:r>
-          </a:p>"#
+            body_paragraphs.push_str(&format!(
+                r#"<a:p><a:r><a:rPr lang="{lang_tag}" sz="1400" i="1"><a:solidFill><a:srgbClr val="6B7280"/></a:solidFill></a:rPr><a:t>(Bu sayfa görsel içeriklidir veya metin katmanı içermemektedir)</a:t></a:r></a:p>"#
             ));
         } else {
             for line in p.text.lines() {
                 let trimmed_l = line.trim();
                 if trimmed_l.is_empty() {
-                    paragraphs.push_str("          <a:p/>\n");
+                    body_paragraphs.push_str("<a:p/>");
                 } else {
-                    paragraphs.push_str(&format!(
-                        r#"          <a:p>
-            <a:r>
-              <a:rPr lang="{lang_tag}" sz="1400">
-                <a:solidFill><a:srgbClr val="1E293B"/></a:solidFill>
-              </a:rPr>
-              <a:t>{}</a:t>
-            </a:r>
-          </a:p>
-"#,
-                        escape_xml(line)
+                    body_paragraphs.push_str(&format!(
+                        r#"<a:p><a:r><a:rPr lang="{lang_tag}" sz="1400"><a:solidFill><a:srgbClr val="1F2937"/></a:solidFill></a:rPr><a:t>{}</a:t></a:r></a:p>"#,
+                        escape_xml(trimmed_l)
                     ));
                 }
             }
@@ -687,77 +623,9 @@ fn generate_pptx(
 
         let slide_xml = format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-       xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-  <p:cSld>
-    <p:spTree>
-      <p:nvGrpSpPr>
-        <p:cNvPr id="1" name=""/>
-        <p:cNvGrpSpPr/>
-        <p:nvPr/>
-      </p:nvGrpSpPr>
-      <p:grpSpPr>
-        <a:xfrm>
-          <a:off x="0" y="0"/>
-          <a:ext cx="0" cy="0"/>
-          <a:chOff x="0" y="0"/>
-          <a:chExt cx="0" cy="0"/>
-        </a:xfrm>
-      </p:grpSpPr>
-      <p:sp>
-        <p:nvSpPr>
-          <p:cNvPr id="2" name="Title"/>
-          <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-          <p:nvPr/>
-        </p:nvSpPr>
-        <p:spPr>
-          <a:xfrm>
-            <a:off x="685800" y="457200"/>
-            <a:ext cx="10820400" cy="685800"/>
-          </a:xfrm>
-          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-        </p:spPr>
-        <p:txBody>
-          <a:bodyPr vert="horz" lIns="91440" tIns="45720" rIns="91440" bIns="45720" rtlCol="0"/>
-          <a:lstStyle/>
-          <a:p>
-            <a:r>
-              <a:rPr lang="{lang_tag}" sz="2800" b="1">
-                <a:solidFill><a:srgbClr val="1E40AF"/></a:solidFill>
-              </a:rPr>
-              <a:t>Sayfa {}</a:t>
-            </a:r>
-          </a:p>
-        </p:txBody>
-      </p:sp>
-      <p:sp>
-        <p:nvSpPr>
-          <p:cNvPr id="3" name="Content"/>
-          <p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr>
-          <p:nvPr/>
-        </p:nvSpPr>
-        <p:spPr>
-          <a:xfrm>
-            <a:off x="685800" y="1300000"/>
-            <a:ext cx="10820400" cy="5000000"/>
-          </a:xfrm>
-          <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-        </p:spPr>
-        <p:txBody>
-          <a:bodyPr vert="horz" lIns="91440" tIns="45720" rIns="91440" bIns="45720" rtlCol="0"/>
-          <a:lstStyle/>
-{}
-        </p:txBody>
-      </p:sp>
-    </p:spTree>
-  </p:cSld>
-  <p:clrMapOvr>
-    <a:masterClrMapping/>
-  </p:clrMapOvr>
-</p:sld>"#,
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="457200"/><a:ext cx="8229600" cy="914400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none"><a:spAutoFit/></a:bodyPr><a:lstStyle/><a:p><a:r><a:rPr lang="{lang_tag}" sz="2800" b="1"><a:solidFill><a:srgbClr val="1E40AF"/></a:solidFill></a:rPr><a:t>Sayfa {}</a:t></a:r></a:p></p:txBody></p:sp><p:sp><p:nvSpPr><p:cNvPr id="3" name="Content"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="457200" y="1600000"/><a:ext cx="8229600" cy="4800000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="square"><a:spAutoFit/></a:bodyPr><a:lstStyle/>{}</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"#,
             p.page,
-            paragraphs
+            body_paragraphs
         );
 
         let slide_path = format!("ppt/slides/slide{}.xml", slide_num);
@@ -802,10 +670,7 @@ fn generate_txt(
     Ok(())
 }
 
-use std::io::{BufRead, BufReader};
-use std::process::Stdio;
 use std::sync::atomic::{AtomicU32, Ordering};
-use tauri::Emitter;
 
 static ACTIVE_CONVERSION_PID: AtomicU32 = AtomicU32::new(0);
 static CANCELLATION_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -841,230 +706,24 @@ pub fn cancel_conversion() -> Result<(), PdfError> {
     Ok(())
 }
 
-/// Attempts high-fidelity layout analysis & reconstruction via the local Python engine.
-/// Supports real-time JSON progress streaming and graceful fallback.
-fn try_advanced_layout_engine(
-    app: &tauri::AppHandle,
-    input_pdf: &str,
-    output_path: &str,
-    format: &str,
-) -> Result<(), String> {
-    use tauri::Manager;
-    CANCELLATION_REQUESTED.store(false, Ordering::SeqCst);
-
-    // 0. Pre-checks for file lock / sharing violation (e.g. file open in another program)
-    if let Err(e) = std::fs::File::open(input_pdf) {
-        #[cfg(target_os = "windows")]
-        if e.raw_os_error() == Some(32) {
-            return Err("Dosya başka bir programda açık (!)".to_string());
-        }
-        if e.kind() == std::io::ErrorKind::PermissionDenied {
-            return Err("Dosya başka bir programda açık (!)".to_string());
-        }
-    }
-
-    if Path::new(output_path).exists() {
-        if let Err(e) = std::fs::OpenOptions::new().write(true).open(output_path) {
-            #[cfg(target_os = "windows")]
-            if e.raw_os_error() == Some(32) {
-                return Err("Dosya başka bir programda açık (!)".to_string());
-            }
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                return Err("Dosya başka bir programda açık (!)".to_string());
-            }
-        }
-    }
-
-    let mut script_path = None;
-
-    // 1. Check Tauri resource directory
-    if let Ok(res_dir) = app.path().resource_dir() {
-        let p1 = res_dir.join("scripts").join("pdf2docx_engine.py");
-        let p2 = res_dir.join("pdf2docx_engine.py");
-        if p1.exists() {
-            script_path = Some(p1);
-        } else if p2.exists() {
-            script_path = Some(p2);
-        }
-    }
-
-    // 2. Check exe-relative directories
-    if script_path.is_none() {
-        if let Ok(exe_dir) = std::env::current_exe().map(|p| p.parent().unwrap_or(Path::new(".")).to_path_buf()) {
-            let candidates = [
-                exe_dir.join("scripts").join("pdf2docx_engine.py"),
-                exe_dir.join("resources").join("pdf2docx_engine.py"),
-                exe_dir.join("pdf2docx_engine.py"),
-                exe_dir.join("..").join("..").join("src-tauri").join("scripts").join("pdf2docx_engine.py"),
-                exe_dir.join("..").join("src-tauri").join("scripts").join("pdf2docx_engine.py"),
-            ];
-            for c in &candidates {
-                if c.exists() {
-                    script_path = Some(c.clone());
-                    break;
-                }
-            }
-        }
-    }
-
-    // 3. Check relative and known workspace paths
-    if script_path.is_none() {
-        let possible_script_paths = [
-            "src-tauri/scripts/pdf2docx_engine.py",
-            "scripts/pdf2docx_engine.py",
-            "../src-tauri/scripts/pdf2docx_engine.py",
-        ];
-        for p in &possible_script_paths {
-            if Path::new(p).exists() {
-                script_path = Some(PathBuf::from(p));
-                break;
-            }
-        }
-    }
-
-    let script = script_path.ok_or_else(|| "Dönüştürme modülü bileşeni bulunamadı".to_string())?;
-
-    // 4. Try python candidates:
-    let python_candidates = [
-        "python",
-        "py",
-        "python3",
-    ];
-
-    for py in &python_candidates {
-        if CANCELLATION_REQUESTED.load(Ordering::SeqCst) {
-            if Path::new(output_path).exists() {
-                let _ = std::fs::remove_file(output_path);
-            }
-            return Err("Dönüştürme işlemi iptal edildi.".to_string());
-        }
-
-        let mut cmd = std::process::Command::new(py);
-        cmd.arg(&script)
-            .arg("--input")
-            .arg(input_pdf)
-            .arg("--output")
-            .arg(output_path)
-            .arg("--format")
-            .arg(format)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null()); // IMPORTANT: Do not pipe stderr without reading it, to prevent Windows OS pipe buffer deadlock!
-
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW: prevent CMD flash
-        }
-
-        let mut child = match cmd.spawn() {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-
-        let pid = child.id();
-        ACTIVE_CONVERSION_PID.store(pid, Ordering::SeqCst);
-
-        let mut child_error: Option<String> = None;
-
-        // Read stdout line by line for real-time progress and messages
-        if let Some(stdout) = child.stdout.take() {
-            let reader = BufReader::new(stdout);
-            let app_clone = app.clone();
-            for line in reader.lines().flatten() {
-                if CANCELLATION_REQUESTED.load(Ordering::SeqCst) {
-                    let _ = child.kill();
-                    break;
-                }
-                if line.starts_with('{') {
-                    if let Ok(progress) = serde_json::from_str::<ConversionProgress>(&line) {
-                        let _ = app_clone.emit("conversion-progress", &progress);
-                    } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
-                        if val.get("type").and_then(|t| t.as_str()) == Some("error") {
-                            if let Some(msg) = val.get("message").and_then(|m| m.as_str()) {
-                                child_error = Some(msg.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let status = child.wait();
-        ACTIVE_CONVERSION_PID.store(0, Ordering::SeqCst);
-
-        if CANCELLATION_REQUESTED.load(Ordering::SeqCst) {
-            if Path::new(output_path).exists() {
-                let _ = std::fs::remove_file(output_path);
-            }
-            return Err("Dönüştürme işlemi iptal edildi.".to_string());
-        }
-
-        match status {
-            Ok(s) if s.success() => {
-                if Path::new(output_path).exists()
-                    && std::fs::metadata(output_path).map(|m| m.len() > 0).unwrap_or(false)
-                {
-                    return Ok(());
-                }
-            }
-            _ => {
-                if let Some(err_msg) = child_error {
-                    if err_msg.contains("Permission denied") || err_msg.contains("Errno 13") || err_msg.contains("Sharing violation") {
-                        return Err("Dosya başka bir programda açık (!)".to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    if CANCELLATION_REQUESTED.load(Ordering::SeqCst) {
-        if Path::new(output_path).exists() {
-            let _ = std::fs::remove_file(output_path);
-        }
-        return Err("Dönüştürme işlemi iptal edildi.".to_string());
-    }
-
-    Err("Dönüştürme işlemi tamamlanamadı. Lütfen belgenizin açık olmadığından ve geçerli bir dosya olduğundan emin olun.".to_string())
-}
-
 #[tauri::command]
 pub async fn export_office_document(
-    app: tauri::AppHandle,
-    input_path: Option<String>,
+    _app: tauri::AppHandle,
+    _input_path: Option<String>,
     output_path: String,
     format: String,
     doc_title: String,
     language: Option<String>,
     pages: Vec<PageTextData>,
 ) -> Result<(), PdfError> {
+    CANCELLATION_REQUESTED.store(false, Ordering::SeqCst);
     let path = Path::new(&output_path);
     let lang = language.as_deref().unwrap_or("tr");
     let fmt = format.to_lowercase();
 
     match fmt.as_str() {
-        "docx" | "pptx" => {
-            // Attempt advanced layout analysis & reconstruction via backend engine
-            if let Some(ref in_path) = input_path {
-                if Path::new(in_path).exists() {
-                    match try_advanced_layout_engine(&app, in_path, &output_path, &fmt) {
-                        Ok(()) => {
-                            eprintln!("[{}] Gelişmiş ofis yeniden inşası başarıyla tamamlandı.", fmt.to_uppercase());
-                            return Ok(());
-                        }
-                        Err(err) => {
-                            return Err(PdfError::Custom(err));
-                        }
-                    }
-                }
-            }
-
-            // Fallback to built-in clean OpenXML generator for tests or direct text payloads
-            if fmt == "docx" {
-                generate_docx(path, &doc_title, &pages, lang)
-            } else {
-                generate_pptx(path, &pages, lang)
-            }
-        }
+        "docx" => generate_docx(path, &doc_title, &pages, lang),
+        "pptx" => generate_pptx(path, &pages, lang),
         "xlsx" => generate_xlsx(path, &pages),
         "txt" => generate_txt(path, &pages),
         other => Err(PdfError::Custom(format!("Desteklenmeyen dosya formatı: {}", other))),

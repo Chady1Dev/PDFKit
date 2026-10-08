@@ -134,21 +134,19 @@
           return;
         }
 
-        // Extract text only for spreadsheet or text formats; docx and pptx use the native Python engine with direct inputPath
+        // Extract text across all pages with real-time smooth progress tracking
         const pagesText: { page: number; text: string }[] = [];
-        if (selectedFormat === "xlsx" || selectedFormat === "txt") {
-          for (let p = 1; p <= doc.pageCount; p++) {
-            if (!busy || isCancelled) break;
-            try {
-              const t = await doc.handle.getPageText(p);
-              pagesText.push({ page: p, text: t });
-            } catch (err) {
-              console.warn(`Sayfa ${p} metin çıkarma hatası:`, err);
-              pagesText.push({ page: p, text: "" });
-            }
-            progress = Math.round((p / doc.pageCount) * 100);
-            progressText = `Sayfa ${p} / ${doc.pageCount} taranıyor...`;
+        for (let p = 1; p <= doc.pageCount; p++) {
+          if (!busy || isCancelled) break;
+          try {
+            const t = await doc.handle.getPageText(p);
+            pagesText.push({ page: p, text: t });
+          } catch (err) {
+            console.warn(`Sayfa ${p} metin çıkarma hatası:`, err);
+            pagesText.push({ page: p, text: "" });
           }
+          progress = Math.round((p / doc.pageCount) * 100);
+          progressText = `Sayfa ${p} / ${doc.pageCount} dönüştürülüyor... (%${progress})`;
         }
 
         if (!busy || isCancelled) return;
