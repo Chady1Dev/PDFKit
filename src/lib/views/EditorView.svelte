@@ -412,82 +412,275 @@
 
   function getPageUnderCursor(clientX: number, clientY: number): number | null {
     if (!activeDoc) return null;
+    let closestPage: number | null = null;
+    let minDistance = Infinity;
+
     for (let p = 1; p <= activeDoc.pageCount; p++) {
-      const el = document.getElementById(`continuous-page-${p}`);
+      const el = document.getElementById(`continuous-page-viewport-${p}`);
       if (el) {
         const r = el.getBoundingClientRect();
-        if (clientY >= r.top - 20 && clientY <= r.bottom + 20) {
+        if (clientY >= r.top && clientY <= r.bottom) {
           return p;
+        }
+        const centerY = (r.top + r.bottom) / 2;
+        const dist = Math.abs(clientY - centerY);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestPage = p;
         }
       }
     }
-    return null;
+    return closestPage;
   }
 
-  function transferDraggedItemToPage(targetPage: number, clientX: number, clientY: number) {
-    if (!activeDoc || targetPage === activeDoc.currentPage || targetPage < 1 || targetPage > activeDoc.pageCount) return;
-    const sourcePage = activeDoc.currentPage;
-    const sourceEl = document.getElementById(`continuous-page-${sourcePage}`);
-    const targetEl = document.getElementById(`continuous-page-${targetPage}`);
+  function getPagePos(e: MouseEvent, page: number): { x: number; y: number } | null {
+    if (!activeDoc) return null;
+    const viewportEl = document.getElementById(`continuous-page-viewport-${page}`);
+    if (!viewportEl) return null;
+    const rect = viewportEl.getBoundingClientRect();
+    const s = activeDoc.scale || 1.0;
+    return {
+      x: (e.clientX - rect.left) / s,
+      y: (e.clientY - rect.top) / s,
+    };
+  }
+
+  let dragStartClientX = 0;
+  let dragStartClientY = 0;
+  let dragSourcePage = 1;
+  let dragInitialSnapshots: {
+    id: string;
+    page: number;
+    x?: number;
+    y?: number;
+    startX?: number;
+    startY?: number;
+    endX?: number;
+    endY?: number;
+    points?: { x: number; y: number }[];
+  }[] = [];
+
+  function startDraggingSelectedItems(e: MouseEvent, sourcePage: number) {
+    if (!activeDoc || selectedAnnotationIds.length === 0) return;
+    isDraggingItem = true;
+    didMoveItem = false;
+    isPointerDown = true;
+    dragStartClientX = e.clientX;
+    dragStartClientY = e.clientY;
+    dragSourcePage = sourcePage;
+
+    const pageList = activeDoc.annotations[sourcePage] || [];
+    const selSet = new Set(selectedAnnotationIds);
+    dragInitialSnapshots = pageList
+      .filter((a) => selSet.has(a.id))
+      .map((a) => ({
+        id: a.id,
+        page: sourcePage,
+        x: a.x,
+        y: a.y,
+        startX: a.startX,
+        startY: a.startY,
+        endX: a.endX,
+        endY: a.endY,
+        points: a.points ? a.points.map((p) => ({ ...p })) : undefined,
+      }));
+
+    window.addEventListener("mousemove", onWindowMouseMove, { passive: false });
+    window.addEventListener("mouseup", onWindowMouseUp, { passive: false });
+  }
+
+  function applyDragMove(clientX: number, clientY: number, targetPage: number) {
+    if (!activeDoc || dragInitialSnapshots.length === 0) return;
+    const s = activeDoc.scale || 1.0;
+
+    const sourceEl = document.getElementById(`continuous-page-viewport-${dragSourcePage}`);
+    const targetEl = document.getElementById(`continuous-page-viewport-${targetPage}`);
     if (!sourceEl || !targetEl) return;
 
     const sourceRect = sourceEl.getBoundingClientRect();
     const targetRect = targetEl.getBoundingClientRect();
-    const s = activeDoc.scale;
 
-    const deltaX = (sourceRect.left - targetRect.left) / s;
-    const deltaY = (sourceRect.top - targetRect.top) / s;
+    const mouseDeltaX = (clientX - dragStartClientX) / s;
+    const mouseDeltaY = (clientY - dragStartClientY) / s;
 
-    const sourceList = activeDoc.annotations[sourcePage] || [];
-    const selSet = new Set(selectedAnnotationIds);
-    const itemsToMove: Annotation[] = [];
-    const remainingSourceItems: Annotation[] = [];
+    const pageDeltaX = (sourceRect.left - targetRect.left) / s;
+    const pageDeltaY = (sourceRect.top - targetRect.top) / s;
 
-    for (const item of sourceList) {
-      if (selSet.has(item.id)) {
-        itemsToMove.push(item);
-      } else {
-        remainingSourceItems.push(item);
-      }
+    const totalShiftX = mouseDeltaX + pageDeltaX;
+    const totalShiftY = mouseDeltaY + pageDeltaY;
+
+    if (Math.abs(mouseDeltaX) > 2 || Math.abs(mouseDeltaY) > 2) {
+      didMoveItem = true;
     }
 
-    if (itemsToMove.length === 0) return;
+    const selSet = new Set(selectedAnnotationIds);
 
-    for (const item of itemsToMove) {
-      if (item.x !== undefined) item.x += deltaX;
-      if (item.y !== undefined) item.y += deltaY;
-      if (item.startX !== undefined) item.startX += deltaX;
-      if (item.startY !== undefined) item.startY += deltaY;
-      if (item.endX !== undefined) item.endX += deltaX;
-      if (item.endY !== undefined) item.endY += deltaY;
-      if (item.points) {
-        for (const pt of item.points) {
-          pt.x += deltaX;
-          pt.y += deltaY;
+    // If targetPage !== activeDoc.currentPage, transfer items between pages in store
+    if (targetPage !== activeDoc.currentPage) {
+      const prevPage = activeDoc.currentPage;
+      const prevList = activeDoc.annotations[prevPage] || [];
+      const movingItems = prevList.filter((a) => selSet.has(a.id));
+      const remainingPrev = prevList.filter((a) => !selSet.has(a.id));
+
+      activeDoc.annotations[prevPage] = remainingPrev;
+      setPageAnnotations(activeDoc.id, prevPage, remainingPrev);
+
+      const targetList = [...(activeDoc.annotations[targetPage] || []), ...movingItems];
+      activeDoc.annotations[targetPage] = targetList;
+      setPageAnnotations(activeDoc.id, targetPage, targetList);
+
+      activeDoc.currentPage = targetPage;
+      updateDocPage(activeDoc.id, targetPage);
+      notifyPageThumbnailsUpdated(prevPage);
+      notifyPageThumbnailsUpdated(targetPage);
+    }
+
+    const currentList = activeDoc.annotations[activeDoc.currentPage] || [];
+    for (const snap of dragInitialSnapshots) {
+      const item = currentList.find((a) => a.id === snap.id);
+      if (!item) continue;
+
+      if (item.type === "rect" || item.type === "redact" || item.type === "image" || item.type === "text" || item.type === "circle") {
+        item.x = (snap.x ?? 0) + totalShiftX;
+        item.y = (snap.y ?? 0) + totalShiftY;
+      } else if (item.type === "arrow" || item.type === "line") {
+        item.startX = (snap.startX ?? 0) + totalShiftX;
+        item.startY = (snap.startY ?? 0) + totalShiftY;
+        item.endX = (snap.endX ?? 0) + totalShiftX;
+        item.endY = (snap.endY ?? 0) + totalShiftY;
+      } else if (item.type === "stroke" || item.type === "highlighter") {
+        if (snap.points && item.points) {
+          for (let i = 0; i < snap.points.length; i++) {
+            if (item.points[i]) {
+              item.points[i].x = snap.points[i].x + totalShiftX;
+              item.points[i].y = snap.points[i].y + totalShiftY;
+            }
+          }
         }
       }
     }
 
-    activeDoc.annotations[sourcePage] = remainingSourceItems;
-    setPageAnnotations(activeDoc.id, sourcePage, remainingSourceItems);
+    activeDoc.annotations[activeDoc.currentPage] = currentList;
+    setPageAnnotations(activeDoc.id, activeDoc.currentPage, currentList);
+    redrawOverlay(currentList);
+  }
 
-    const targetList = [...(activeDoc.annotations[targetPage] || []), ...itemsToMove];
-    activeDoc.annotations[targetPage] = targetList;
-    setPageAnnotations(activeDoc.id, targetPage, targetList);
+  function handlePageMouseMove(page: number, e: MouseEvent) {
+    if (currentTool !== "select") return;
+    if (!activeDoc || isPointerDown) return;
 
-    activeDoc.currentPage = targetPage;
-    updateDocPage(activeDoc.id, targetPage);
+    const pos = getPagePos(e, page);
+    if (!pos) return;
 
-    lastMoveX = (clientX - targetRect.left) / s;
-    lastMoveY = (clientY - targetRect.top) / s;
-    didMoveItem = true;
+    const pageList = activeDoc.annotations[page] || [];
+    hoverResizeHandle = null;
 
-    notifyPageThumbnailsUpdated(sourcePage);
-    notifyPageThumbnailsUpdated(targetPage);
+    if (page === activeDoc.currentPage && selectedAnnotationIds.length === 1) {
+      const selectedItem = pageList.find((a) => a.id === selectedAnnotationIds[0]);
+      if (selectedItem) {
+        const bounds = getAnnotationBounds(selectedItem);
+        if (bounds) {
+          const hitHandle = findHitResizeHandle(pos, bounds, activeDoc.scale);
+          if (hitHandle) {
+            hoverResizeHandle = hitHandle;
+            isHoveringItem = false;
+            return;
+          }
+        }
+      }
+    }
 
-    tick().then(() => {
-      redrawOverlay();
-    });
+    const hit = findHitAnnotation(pos, pageList);
+    isHoveringItem = hit !== null;
+  }
+
+  async function handlePageMouseDown(page: number, e: MouseEvent) {
+    if (!activeDoc) return;
+
+    if (currentTool === "select") {
+      const pos = getPagePos(e, page);
+      if (!pos) return;
+
+      const pageList = activeDoc.annotations[page] || [];
+
+      // Check resize handles if single item selected
+      if (page === activeDoc.currentPage && selectedAnnotationIds.length === 1) {
+        const selectedItem = pageList.find((a) => a.id === selectedAnnotationIds[0]);
+        if (selectedItem) {
+          const bounds = getAnnotationBounds(selectedItem);
+          if (bounds) {
+            const hitHandle = findHitResizeHandle(pos, bounds, activeDoc.scale);
+            if (hitHandle) {
+              isResizingItem = true;
+              didResizeItem = false;
+              activeResizeHandle = hitHandle.type;
+              resizeStartPos = { x: pos.x, y: pos.y };
+              resizeInitialBounds = { ...bounds };
+              resizeInitialSnapshot = pageList.map((a) => ({
+                ...a,
+                points: a.points ? a.points.map((p) => ({ ...p })) : undefined,
+              }));
+              window.addEventListener("mousemove", onWindowMouseMove, { passive: false });
+              window.addEventListener("mouseup", onWindowMouseUp, { passive: false });
+              return;
+            }
+          }
+        }
+      }
+
+      const clicked = findHitAnnotation(pos, pageList);
+      if (clicked) {
+        if (page !== activeDoc.currentPage) {
+          if (textInputVisible) commitTextInput();
+          activeDoc.currentPage = page;
+          updateDocPage(activeDoc.id, page);
+        }
+
+        if (e.ctrlKey || e.metaKey) {
+          if (selectedAnnotationIds.includes(clicked.id)) {
+            selectedAnnotationIds = selectedAnnotationIds.filter((id) => id !== clicked.id);
+          } else {
+            selectedAnnotationIds = [...selectedAnnotationIds, clicked.id];
+          }
+        } else {
+          if (!selectedAnnotationIds.includes(clicked.id)) {
+            selectedAnnotationIds = [clicked.id];
+          }
+        }
+
+        if (selectedAnnotationIds.length > 0) {
+          syncStyleFromSelected();
+          startDraggingSelectedItems(e, page);
+        } else {
+          isDraggingItem = false;
+        }
+        redrawOverlay();
+        return;
+      } else {
+        if (!e.ctrlKey && !e.metaKey) {
+          selectedAnnotationIds = [];
+        }
+        isHoveringItem = false;
+        hoverResizeHandle = null;
+        if (page !== activeDoc.currentPage) {
+          if (textInputVisible) commitTextInput();
+          activeDoc.currentPage = page;
+          updateDocPage(activeDoc.id, page);
+        }
+        redrawOverlay();
+      }
+    } else {
+      if (page !== activeDoc.currentPage) {
+        if (textInputVisible) commitTextInput();
+        selectedAnnotationIds = [];
+        activeDoc.currentPage = page;
+        updateDocPage(activeDoc.id, page);
+        await tick();
+        if (overlayCanvas) {
+          onMouseDown(e);
+        }
+      }
+    }
   }
 
   async function handlePageSelect(selectedP: number, e?: MouseEvent) {
@@ -714,27 +907,7 @@
       : "none";
 
   function handleWrapperMouseMove(e: MouseEvent) {
-    if (currentTool !== "select") return;
-    if (!activeDoc || !overlayCanvas) return;
-    const pos = getCanvasPos(e);
-    const pageList = activeDoc.annotations[activeDoc.currentPage] || [];
-    hoverResizeHandle = null;
-    if (selectedAnnotationIds.length === 1) {
-      const selectedItem = pageList.find((a) => a.id === selectedAnnotationIds[0]);
-      if (selectedItem) {
-        const bounds = getAnnotationBounds(selectedItem);
-        if (bounds) {
-          const hitHandle = findHitResizeHandle(pos, bounds, activeDoc.scale);
-          if (hitHandle) {
-            hoverResizeHandle = hitHandle;
-            isHoveringItem = false;
-            return;
-          }
-        }
-      }
-    }
-    const hit = findHitAnnotation(pos, pageList);
-    isHoveringItem = !!hit;
+    if (activeDoc) handlePageMouseMove(activeDoc.currentPage, e);
   }
 
   // Eraser state: "object" (Bölgesel), "precision" (Hassas - çizim silici), "whiteout" (Daksil - arka plan da siler)
@@ -787,9 +960,15 @@
     }
   }
 
-  $: if (overlayCanvas && activeDoc) {
-    overlayCtx = overlayCanvas.getContext("2d");
-    redrawOverlay();
+  $: if (activeDoc && activeDoc.scale !== undefined && overlayCanvas) {
+    const _s = activeDoc.scale;
+    const _p = activeDoc.currentPage;
+    tick().then(() => {
+      if (overlayCanvas) {
+        overlayCtx = overlayCanvas.getContext("2d");
+        redrawOverlay();
+      }
+    });
   }
 
   $: if (activeDoc && (activeDoc.currentPage || activeDoc.scale)) {
@@ -839,7 +1018,12 @@
   }
 
   async function renderCurrentPage() {
-    if (!activeDoc || !pdfCanvas || !overlayCanvas) return;
+    if (!activeDoc) return;
+    if (overlayCanvas) {
+      overlayCtx = overlayCanvas.getContext("2d");
+      redrawOverlay();
+    }
+    if (!pdfCanvas || !overlayCanvas) return;
     try {
       const rendered = await activeDoc.handle.renderPage(activeDoc.currentPage, activeDoc.scale);
       pdfCanvas.width = rendered.width;
@@ -1218,15 +1402,21 @@
     if (item.type === "line" || item.type === "arrow") {
       return distanceToSegment(px, py, item.startX ?? 0, item.startY ?? 0, item.endX ?? 0, item.endY ?? 0);
     }
-    if (item.type === "rect") {
+    if (item.type === "rect" || item.type === "redact" || item.type === "image" || item.type === "text") {
       const x = item.x ?? 0;
       const y = item.y ?? 0;
       const w = item.width ?? 40;
       const h = item.height ?? 30;
-      const dTop = distanceToSegment(px, py, x, y, x + w, y);
-      const dBottom = distanceToSegment(px, py, x, y + h, x + w, y + h);
-      const dLeft = distanceToSegment(px, py, x, y, x, y + h);
-      const dRight = distanceToSegment(px, py, x + w, y, x + w, y + h);
+      const minX = Math.min(x, x + w);
+      const maxX = Math.max(x, x + w);
+      const minY = Math.min(y, y + h);
+      const maxY = Math.max(y, y + h);
+      // If clicking inside the bounding rectangle, return 0 (direct hit)
+      if (px >= minX && px <= maxX && py >= minY && py <= maxY) return 0;
+      const dTop = distanceToSegment(px, py, minX, minY, maxX, minY);
+      const dBottom = distanceToSegment(px, py, minX, maxY, maxX, maxY);
+      const dLeft = distanceToSegment(px, py, minX, minY, minX, maxY);
+      const dRight = distanceToSegment(px, py, maxX, minY, maxX, maxY);
       return Math.min(dTop, dBottom, dLeft, dRight);
     }
     if (item.type === "circle") {
@@ -1234,10 +1424,15 @@
       const y = item.y ?? 0;
       const w = item.width ?? 40;
       const h = item.height ?? 30;
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      const rx = w / 2;
-      const ry = h / 2;
+      const minX = Math.min(x, x + w);
+      const minY = Math.min(y, y + h);
+      const cx = minX + Math.abs(w) / 2;
+      const cy = minY + Math.abs(h) / 2;
+      const rx = Math.max(1, Math.abs(w) / 2);
+      const ry = Math.max(1, Math.abs(h) / 2);
+      const normDist = ((px - cx) / rx) ** 2 + ((py - cy) / ry) ** 2;
+      // If clicking inside the circle / ellipse, return 0 (direct hit)
+      if (normDist <= 1.0) return 0;
       const avgR = (rx + ry) / 2;
       const distFromCenter = Math.hypot(px - cx, py - cy);
       return Math.abs(distFromCenter - avgR);
@@ -1256,24 +1451,12 @@
       }
       return minDist;
     }
-    if (item.type === "redact" || item.type === "image" || item.type === "text") {
-      const x = item.x ?? 0;
-      const y = item.y ?? 0;
-      const w = item.width ?? 40;
-      const h = item.height ?? 30;
-      if (px >= x && px <= x + w && py >= y && py <= y + h) return 0;
-      const dTop = distanceToSegment(px, py, x, y, x + w, y);
-      const dBottom = distanceToSegment(px, py, x, y + h, x + w, y + h);
-      const dLeft = distanceToSegment(px, py, x, y, x, y + h);
-      const dRight = distanceToSegment(px, py, x + w, y, x + w, y + h);
-      return Math.min(dTop, dBottom, dLeft, dRight);
-    }
     return Infinity;
   }
 
   function findHitAnnotation(pos: { x: number; y: number }, list: Annotation[]): Annotation | null {
     let bestItem: Annotation | null = null;
-    let minDistance = 12;
+    let minDistance = 14;
 
     for (let i = list.length - 1; i >= 0; i--) {
       const a = list[i];
@@ -1347,10 +1530,8 @@
     if (isDraggingItem && canvasContainer) {
       // While dragging an item, scroll the continuous container smoothly
       canvasContainer.scrollTop += e.deltaY * 0.8;
-      const targetPage = getPageUnderCursor(e.clientX, e.clientY);
-      if (targetPage && targetPage !== activeDoc.currentPage) {
-        transferDraggedItemToPage(targetPage, e.clientX, e.clientY);
-      }
+      const targetPage = getPageUnderCursor(e.clientX, e.clientY) || activeDoc.currentPage;
+      applyDragMove(e.clientX, e.clientY, targetPage);
     }
   }
 
@@ -1416,16 +1597,7 @@
 
         if (selectedAnnotationIds.length > 0) {
           syncStyleFromSelected();
-          isDraggingItem = true;
-          didMoveItem = false;
-          dragInitialSnapshot = pageList.map((a) => ({
-            ...a,
-            points: a.points ? a.points.map((p) => ({ ...p })) : undefined,
-          }));
-          lastMoveX = pos.x;
-          lastMoveY = pos.y;
-          window.addEventListener("mousemove", onWindowMouseMove, { passive: false });
-          window.addEventListener("mouseup", onWindowMouseUp, { passive: false });
+          startDraggingSelectedItems(e, activeDoc.currentPage);
         } else {
           isDraggingItem = false;
         }
@@ -1485,24 +1657,7 @@
     }
 
     if (currentTool === "select" && !isPointerDown) {
-      const pageList = activeDoc.annotations[activeDoc.currentPage] || [];
-      hoverResizeHandle = null;
-      if (selectedAnnotationIds.length === 1) {
-        const selectedItem = pageList.find((a) => a.id === selectedAnnotationIds[0]);
-        if (selectedItem) {
-          const bounds = getAnnotationBounds(selectedItem);
-          if (bounds) {
-            const hitHandle = findHitResizeHandle(pos, bounds, activeDoc.scale);
-            if (hitHandle) {
-              hoverResizeHandle = hitHandle;
-              isHoveringItem = false;
-              return;
-            }
-          }
-        }
-      }
-      const hit = findHitAnnotation(pos, pageList);
-      isHoveringItem = !!hit;
+      handlePageMouseMove(activeDoc.currentPage, e);
       return;
     }
 
@@ -1862,14 +2017,9 @@
         }
       }
 
-      // 3. Check if cursor crossed into another page in continuous mode
-      const targetPage = getPageUnderCursor(e.clientX, e.clientY);
-      if (targetPage && targetPage !== activeDoc.currentPage) {
-        transferDraggedItemToPage(targetPage, e.clientX, e.clientY);
-        return;
-      }
-
-      onMouseMove(e);
+      // 3. Move items smoothly across canvas or across pages in continuous mode
+      const targetPage = getPageUnderCursor(e.clientX, e.clientY) || activeDoc.currentPage;
+      applyDragMove(e.clientX, e.clientY, targetPage);
     }
   }
 
@@ -1889,6 +2039,15 @@
         return;
       }
       dragOverSidebarPage = null;
+
+      if (didMoveItem) {
+        markDocumentModified(activeDoc.id);
+        notifyPageThumbnailsUpdated(activeDoc.currentPage);
+      }
+      isDraggingItem = false;
+      isPointerDown = false;
+      redrawOverlay();
+      return;
     }
 
     onMouseUp(e);
@@ -3506,15 +3665,24 @@
           <button class="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Uzaklaştır (Ctrl+-)" on:click={() => changeZoom(-0.2)}>
             <ZoomOut size={15} />
           </button>
-          <button
-            type="button"
-            class="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-zinc-600 hover:text-indigo-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-indigo-400 dark:hover:bg-zinc-800 font-mono cursor-pointer transition-colors active:scale-95"
-            title="Yakınlaştırma ve Sığdırma Seçenekleri"
-            on:click|stopPropagation={() => (showZoomMenu = !showZoomMenu)}
-          >
-            <span>%{Math.round(activeDoc.scale * 100)}</span>
-            <ChevronDown size={10} class="text-zinc-400" />
-          </button>
+          <div class="inline-flex items-center rounded border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 bg-zinc-50/50 hover:bg-zinc-100 dark:bg-zinc-800/40 dark:hover:bg-zinc-800 transition-colors">
+            <button
+              type="button"
+              class="px-1.5 py-0.5 text-xs font-mono text-zinc-600 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 cursor-pointer active:scale-95 transition-colors font-medium"
+              title="Yakınlaştırmayı %100 yap (Varsayılana sıfırla)"
+              on:click={resetZoom}
+            >
+              %{Math.round(activeDoc.scale * 100)}
+            </button>
+            <button
+              type="button"
+              class="px-1 py-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer transition-colors"
+              title="Yakınlaştırma ve Sığdırma Seçenekleri"
+              on:click|stopPropagation={() => (showZoomMenu = !showZoomMenu)}
+            >
+              <ChevronDown size={10} />
+            </button>
+          </div>
           <button class="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Yakınlaştır (Ctrl++)" on:click={() => changeZoom(0.2)}>
             <ZoomIn size={15} />
           </button>
@@ -3766,6 +3934,8 @@
                 isCurrentPage={p === activeDoc.currentPage}
                 annotations={activeDoc.annotations[p] || []}
                 onSelectPage={handlePageSelect}
+                onMouseDownPage={handlePageMouseDown}
+                onMouseMovePage={handlePageMouseMove}
                 onLinkClick={handleLinkClick}
                 let:pagePixelWidth
                 let:pagePixelHeight

@@ -706,10 +706,172 @@ pub fn cancel_conversion() -> Result<(), PdfError> {
     Ok(())
 }
 
+fn try_advanced_layout_engine(
+    app: &tauri::AppHandle,
+    input_pdf: &str,
+    output_path: &str,
+    format: &str,
+) -> Result<(), String> {
+    use tauri::{Emitter, Manager};
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    use std::path::PathBuf;
+
+    CANCELLATION_REQUESTED.store(false, Ordering::SeqCst);
+
+    if let Err(e) = std::fs::File::open(input_pdf) {
+        #[cfg(target_os = "windows")]
+        if e.raw_os_error() == Some(32) {
+            return Err("Dosya başka bir programda açık (!)".to_string());
+        }
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            return Err("Dosya başka bir programda açık (!)".to_string());
+        }
+    }
+
+    if Path::new(output_path).exists() {
+        if let Err(e) = std::fs::OpenOptions::new().write(true).open(output_path) {
+            #[cfg(target_os = "windows")]
+            if e.raw_os_error() == Some(32) {
+                return Err("Dosya başka bir programda açık (!)".to_string());
+            }
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                return Err("Dosya başka bir programda açık (!)".to_string());
+            }
+        }
+    }
+
+    let mut script_path = None;
+
+    if let Ok(res_dir) = app.path().resource_dir() {
+        let p1 = res_dir.join("scripts").join("pdf2docx_engine.py");
+        let p2 = res_dir.join("pdf2docx_engine.py");
+        if p1.exists() {
+            script_path = Some(p1);
+        } else if p2.exists() {
+            script_path = Some(p2);
+        }
+    }
+
+    if script_path.is_none() {
+        if let Ok(exe_dir) = std::env::current_exe().map(|p| p.parent().unwrap_or(Path::new(".")).to_path_buf()) {
+            let candidates = [
+                exe_dir.join("scripts").join("pdf2docx_engine.py"),
+                exe_dir.join("resources").join("pdf2docx_engine.py"),
+                exe_dir.join("pdf2docx_engine.py"),
+                exe_dir.join("..").join("..").join("src-tauri").join("scripts").join("pdf2docx_engine.py"),
+                exe_dir.join("..").join("src-tauri").join("scripts").join("pdf2docx_engine.py"),
+            ];
+            for c in &candidates {
+                if c.exists() {
+                    script_path = Some(c.clone());
+                    break;
+                }
+            }
+        }
+    }
+
+    if script_path.is_none() {
+        let possible_script_paths = [
+            "src-tauri/scripts/pdf2docx_engine.py",
+            "scripts/pdf2docx_engine.py",
+            "../src-tauri/scripts/pdf2docx_engine.py",
+        ];
+        for p in &possible_script_paths {
+            if Path::new(p).exists() {
+                script_path = Some(PathBuf::from(p));
+                break;
+            }
+        }
+    }
+
+    let script = script_path.ok_or_else(|| "Dönüştürme modülü scripti bulunamadı".to_string())?;
+
+    let python_candidates = [
+        "python",
+        "py",
+        "python3",
+    ];
+
+    for py in &python_candidates {
+        if CANCELLATION_REQUESTED.load(Ordering::SeqCst) {
+            if Path::new(output_path).exists() {
+                let _ = std::fs::remove_file(output_path);
+            }
+            return Err("Dönüştürme işlemi iptal edildi.".to_string());
+        }
+
+        let mut cmd = std::process::Command::new(py);
+        cmd.arg("-u")
+            .arg(&script)
+            .arg("--input")
+            .arg(input_pdf)
+            .arg("--output")
+            .arg(output_path)
+            .arg("--format")
+            .arg(format)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        let mut child = match cmd.spawn() {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        ACTIVE_CONVERSION_PID.store(child.id(), Ordering::SeqCst);
+
+        let app_clone = app.clone();
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().flatten() {
+                if let Ok(progress) = serde_json::from_str::<ConversionProgress>(&line) {
+                    let _ = app_clone.emit("conversion-progress", &progress);
+                }
+            }
+        }
+
+        let status = child.wait();
+        ACTIVE_CONVERSION_PID.store(0, Ordering::SeqCst);
+
+        if CANCELLATION_REQUESTED.load(Ordering::SeqCst) {
+            if Path::new(output_path).exists() {
+                let _ = std::fs::remove_file(output_path);
+            }
+            return Err("Dönüştürme işlemi iptal edildi.".to_string());
+        }
+
+        match status {
+            Ok(s) if s.success() => {
+                if Path::new(output_path).exists()
+                    && std::fs::metadata(output_path).map(|m| m.len() > 0).unwrap_or(false)
+                {
+                    return Ok(());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if CANCELLATION_REQUESTED.load(Ordering::SeqCst) {
+        if Path::new(output_path).exists() {
+            let _ = std::fs::remove_file(output_path);
+        }
+        return Err("Dönüştürme işlemi iptal edildi.".to_string());
+    }
+
+    Err("Gelişmiş motor tamamlanamadı.".to_string())
+}
+
 #[tauri::command]
 pub async fn export_office_document(
-    _app: tauri::AppHandle,
-    _input_path: Option<String>,
+    app: tauri::AppHandle,
+    input_path: Option<String>,
     output_path: String,
     format: String,
     doc_title: String,
@@ -722,8 +884,35 @@ pub async fn export_office_document(
     let fmt = format.to_lowercase();
 
     match fmt.as_str() {
-        "docx" => generate_docx(path, &doc_title, &pages, lang),
-        "pptx" => generate_pptx(path, &pages, lang),
+        "docx" => {
+            if let Some(ref in_path) = input_path {
+                if Path::new(in_path).exists() {
+                    match try_advanced_layout_engine(&app, in_path, &output_path, &fmt) {
+                        Ok(()) => {
+                            eprintln!("[DOCX] Yüksek kaliteli Word yeniden inşası başarıyla tamamlandı.");
+                            return Ok(());
+                        }
+                        Err(err) => {
+                            eprintln!("[DOCX] Gelişmiş motor hatası: {}, yerel OpenXML deneniyor...", err);
+                            if err.contains("iptal edildi") || err.contains("Dosya başka bir programda açık") {
+                                return Err(PdfError::Custom(err));
+                            }
+                        }
+                    }
+                }
+            }
+            generate_docx(path, &doc_title, &pages, lang)
+        }
+        "pptx" => {
+            if let Some(ref in_path) = input_path {
+                if Path::new(in_path).exists() {
+                    if let Ok(()) = try_advanced_layout_engine(&app, in_path, &output_path, &fmt) {
+                        return Ok(());
+                    }
+                }
+            }
+            generate_pptx(path, &pages, lang)
+        }
         "xlsx" => generate_xlsx(path, &pages),
         "txt" => generate_txt(path, &pages),
         other => Err(PdfError::Custom(format!("Desteklenmeyen dosya formatı: {}", other))),

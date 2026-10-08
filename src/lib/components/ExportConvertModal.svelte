@@ -134,19 +134,21 @@
           return;
         }
 
-        // Extract text across all pages with real-time smooth progress tracking
+        // Extract text for xlsx / txt formats that use direct text tables
         const pagesText: { page: number; text: string }[] = [];
-        for (let p = 1; p <= doc.pageCount; p++) {
-          if (!busy || isCancelled) break;
-          try {
-            const t = await doc.handle.getPageText(p);
-            pagesText.push({ page: p, text: t });
-          } catch (err) {
-            console.warn(`Sayfa ${p} metin çıkarma hatası:`, err);
-            pagesText.push({ page: p, text: "" });
+        if (ext === "xlsx" || ext === "txt") {
+          for (let p = 1; p <= doc.pageCount; p++) {
+            if (!busy || isCancelled) break;
+            try {
+              const t = await doc.handle.getPageText(p);
+              pagesText.push({ page: p, text: t });
+            } catch (err) {
+              console.warn(`Sayfa ${p} metin çıkarma hatası:`, err);
+              pagesText.push({ page: p, text: "" });
+            }
+            progress = Math.round((p / doc.pageCount) * 100);
+            progressText = `Sayfa ${p} / ${doc.pageCount} dönüştürülüyor... (%${progress})`;
           }
-          progress = Math.round((p / doc.pageCount) * 100);
-          progressText = `Sayfa ${p} / ${doc.pageCount} dönüştürülüyor... (%${progress})`;
         }
 
         if (!busy || isCancelled) return;

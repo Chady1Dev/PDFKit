@@ -12,6 +12,8 @@
   export let annotations: Annotation[] = [];
   export let onSelectPage: (p: number, e?: MouseEvent) => void;
   export let onLinkClick: (link: PdfLink) => void;
+  export let onMouseDownPage: ((p: number, e: MouseEvent) => void) | undefined = undefined;
+  export let onMouseMovePage: ((p: number, e: MouseEvent) => void) | undefined = undefined;
 
   let canvasEl: HTMLCanvasElement | null = null;
   let overlayEl: HTMLCanvasElement | null = null;
@@ -205,9 +207,14 @@
   data-page={page}
   class="relative mb-6 flex flex-col items-center transition-all {isCurrentPage ? 'ring-2 ring-indigo-500/80 rounded-lg p-1 bg-indigo-50/20 dark:bg-indigo-950/20' : 'p-1 cursor-pointer'}"
   on:mousedown={(e) => {
-    if (!isCurrentPage) {
+    if (onMouseDownPage) {
+      onMouseDownPage(page, e);
+    } else if (!isCurrentPage) {
       onSelectPage(page, e);
     }
+  }}
+  on:mousemove={(e) => {
+    onMouseMovePage?.(page, e);
   }}
 >
   <!-- Page Header Tag -->
@@ -224,6 +231,7 @@
 
   <!-- Page Viewport Container -->
   <div
+    id="continuous-page-viewport-{page}"
     class="relative rounded bg-white shadow-xl"
     style="width: {pagePixelWidth}px; height: {pagePixelHeight}px; min-width: {pagePixelWidth}px; min-height: {pagePixelHeight}px;"
   >
