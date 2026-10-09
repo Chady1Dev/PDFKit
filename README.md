@@ -9,6 +9,7 @@
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
 [![Zero Network](https://img.shields.io/badge/Security-Zero--Network%20(Offline)-2ea44f?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/cagdass1128/PDFKit)
 [![Corporate Deployment](https://img.shields.io/badge/Enterprise-MSI%20%26%20GPO%20Ready-blueviolet?style=for-the-badge&logo=windows-terminal&logoColor=white)](https://github.com/cagdass1128/PDFKit)
+[![License: GPL v3](https://img.shields.io/badge/License-GNU%20GPL%20v3.0-blue?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
 
 <br/>
 
@@ -124,7 +125,10 @@ npm run build:app
 ---
 
 ## 📄 Lisans
-Bu proje topluluğun ve kurumların güvenli, hafif ve ücretsiz araçlara erişebilmesi amacıyla geliştirilmiştir. Açık kaynak standartlarına uygundur.
+Bu proje **[GNU General Public License v3.0 (GPL-3.0)](LICENSE)** ile lisanslanmıştır. 
+
+* Bireysel ve kurumsal ortamlarda tamamen **ücretsiz ve sınırsız** olarak kullanılabilir.
+* Kodun özgürlüğünü korur; açık kaynak standartlarına tam uyumludur. Detaylar için [LICENSE](LICENSE) dosyasına göz atabilirsiniz.
 
 ---
 
