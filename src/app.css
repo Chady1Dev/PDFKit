@@ -6,4 +6,18 @@ html,
 body,
 #app {
   height: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Explicitly allow text selection in PDF text layer and input elements */
+.textLayer,
+.textLayer *,
+.select-text,
+.select-text *,
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }

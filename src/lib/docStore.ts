@@ -5,7 +5,7 @@ import { addRecentFile } from "./recentFiles";
 
 export interface Annotation {
   id: string;
-  type: "stroke" | "highlighter" | "text" | "rect" | "circle" | "arrow" | "line" | "redact" | "image";
+  type: "stroke" | "highlighter" | "text" | "rect" | "circle" | "arrow" | "line" | "redact" | "image" | "underline" | "strike";
   points?: { x: number; y: number }[];
   x?: number;
   y?: number;
@@ -24,6 +24,8 @@ export interface Annotation {
   blendMode?: string;
   imageData?: string;
   imageEl?: HTMLImageElement;
+  rects?: { x: number; y: number; width: number; height: number }[];
+  locked?: boolean;
 }
 
 export interface OpenDocument {

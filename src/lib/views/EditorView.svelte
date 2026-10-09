@@ -350,7 +350,7 @@
     pushToast(`${pastedItems.length} nesne çoğaltıldı`, "success");
   }
 
-  function transferSelectedToPage(targetPage: number, placement: "current" | "top" | "bottom" = "current") {
+  function transferSelectedToPage(targetPage: number, placement: "current" | "top" | "bottom" | "center" = "center") {
     if (!activeDoc || selectedAnnotationIds.length === 0 || targetPage === activeDoc.currentPage) return;
     if (targetPage < 1 || targetPage > activeDoc.pageCount) return;
 
@@ -367,7 +367,59 @@
     setPageAnnotations(activeDoc.id, sourcePage, newSourceList);
     notifyPageThumbnailsUpdated(sourcePage);
 
-    if (placement === "top") {
+    if (placement === "center") {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const it of itemsToMove) {
+        if (it.x !== undefined) {
+          minX = Math.min(minX, it.x);
+          maxX = Math.max(maxX, it.x + (it.width || it.size || 60));
+        }
+        if (it.y !== undefined) {
+          minY = Math.min(minY, it.y);
+          maxY = Math.max(maxY, it.y + (it.height || it.size || 25));
+        }
+        if (it.startX !== undefined && it.endX !== undefined) {
+          minX = Math.min(minX, Math.min(it.startX, it.endX));
+          maxX = Math.max(maxX, Math.max(it.startX, it.endX));
+        }
+        if (it.startY !== undefined && it.endY !== undefined) {
+          minY = Math.min(minY, Math.min(it.startY, it.endY));
+          maxY = Math.max(maxY, Math.max(it.startY, it.endY));
+        }
+        if (it.points && it.points.length > 0) {
+          for (const pt of it.points) {
+            minX = Math.min(minX, pt.x);
+            maxX = Math.max(maxX, pt.x);
+            minY = Math.min(minY, pt.y);
+            maxY = Math.max(maxY, pt.y);
+          }
+        }
+      }
+
+      if (minX !== Infinity && minY !== Infinity) {
+        const itemW = Math.max(10, maxX - minX);
+        const itemH = Math.max(10, maxY - minY);
+        // Default target page dims in PDF points (595 x 842 for A4)
+        const targetPageW = 595;
+        const targetPageH = 842;
+        const targetCenterX = targetPageW / 2;
+        const targetCenterY = targetPageH / 2;
+        const curCenterX = minX + itemW / 2;
+        const curCenterY = minY + itemH / 2;
+        const shiftX = targetCenterX - curCenterX;
+        const shiftY = targetCenterY - curCenterY;
+
+        for (const it of itemsToMove) {
+          if (it.x !== undefined) it.x += shiftX;
+          if (it.y !== undefined) it.y += shiftY;
+          if (it.startX !== undefined) it.startX += shiftX;
+          if (it.endX !== undefined) it.endX += shiftX;
+          if (it.startY !== undefined) it.startY += shiftY;
+          if (it.endY !== undefined) it.endY += shiftY;
+          if (it.points) it.points.forEach((p) => { p.x += shiftX; p.y += shiftY; });
+        }
+      }
+    } else if (placement === "top") {
       let minY = Infinity;
       for (const it of itemsToMove) {
         const y = it.y ?? it.startY ?? (it.points ? Math.min(...it.points.map((p) => p.y)) : 0);
@@ -403,11 +455,11 @@
 
     didPageChangeDuringDrag = true;
     const dir = targetPage > sourcePage ? "down" : "up";
-    setPage(targetPage, true, dir);
+    setPage(targetPage, true, dir, true);
     selectedAnnotationIds = itemsToMove.map((a) => a.id);
     syncStyleFromSelected();
     notifyPageThumbnailsUpdated(targetPage);
-    pushToast(`Nesneler Sayfa ${targetPage}'e taşındı`, "info");
+    pushToast(`Nesneler Sayfa ${targetPage}'in ortasına taşındı`, "info");
   }
 
   function getPageUnderCursor(clientX: number, clientY: number): number | null {
@@ -577,7 +629,7 @@
 
     if (page === activeDoc.currentPage && selectedAnnotationIds.length === 1) {
       const selectedItem = pageList.find((a) => a.id === selectedAnnotationIds[0]);
-      if (selectedItem) {
+      if (selectedItem && !selectedItem.locked) {
         const bounds = getAnnotationBounds(selectedItem);
         if (bounds) {
           const hitHandle = findHitResizeHandle(pos, bounds, activeDoc.scale);
@@ -603,10 +655,10 @@
 
       const pageList = activeDoc.annotations[page] || [];
 
-      // Check resize handles if single item selected
+      // Check resize handles if single item selected (and not locked)
       if (page === activeDoc.currentPage && selectedAnnotationIds.length === 1) {
         const selectedItem = pageList.find((a) => a.id === selectedAnnotationIds[0]);
-        if (selectedItem) {
+        if (selectedItem && !selectedItem.locked) {
           const bounds = getAnnotationBounds(selectedItem);
           if (bounds) {
             const hitHandle = findHitResizeHandle(pos, bounds, activeDoc.scale);
@@ -650,7 +702,13 @@
 
         if (selectedAnnotationIds.length > 0) {
           syncStyleFromSelected();
-          startDraggingSelectedItems(e, page);
+          // Never drag locked annotations (e.g. text markup underline/highlight/strike)
+          const hasLocked = selectedAnnotationIds.some((id) => pageList.find((a) => a.id === id)?.locked);
+          if (!hasLocked) {
+            startDraggingSelectedItems(e, page);
+          } else {
+            isDraggingItem = false;
+          }
         } else {
           isDraggingItem = false;
         }
@@ -964,10 +1022,12 @@
     const _s = activeDoc.scale;
     const _p = activeDoc.currentPage;
     tick().then(() => {
-      if (overlayCanvas) {
-        overlayCtx = overlayCanvas.getContext("2d");
-        redrawOverlay();
-      }
+      requestAnimationFrame(() => {
+        if (overlayCanvas) {
+          overlayCtx = overlayCanvas.getContext("2d");
+          redrawOverlay();
+        }
+      });
     });
   }
 
@@ -1062,10 +1122,25 @@
     }
   }
 
-  function setPage(p: number, keepSelection: boolean = false, customDirection?: "down" | "up") {
+  function scrollToPage(p: number, smooth: boolean = true) {
+    if (!canvasContainer || !activeDoc) return;
+    const buf = activeDoc.pageCount <= 25 ? activeDoc.pageCount : 4;
+    visiblePageRange = {
+      start: Math.max(1, p - buf),
+      end: Math.min(activeDoc.pageCount, p + buf),
+    };
+    setTimeout(() => {
+      const el = document.getElementById(`continuous-page-${p}`);
+      if (el) {
+        el.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+      }
+    }, 20);
+  }
+
+  function setPage(p: number, keepSelection: boolean = false, customDirection?: "down" | "up", autoScroll: boolean = false) {
     if (!activeDoc) return;
     if (p < 1 || p > activeDoc.pageCount) return;
-    if (p === activeDoc.currentPage && !customDirection) return;
+    if (p === activeDoc.currentPage && !customDirection && !autoScroll) return;
 
     const dir = customDirection || (p > activeDoc.currentPage ? "down" : "up");
     pageTransitionDirection = dir;
@@ -1090,6 +1165,10 @@
       selectedAnnotationIds = [];
     }
     pasteOffsetCount = 1;
+
+    if (autoScroll) {
+      scrollToPage(p, true);
+    }
   }
 
   function changeZoom(delta: number) {
@@ -1233,70 +1312,86 @@
     const s = activeDoc.scale;
     pushHistory(activeDoc.id, targetPage);
 
-    const newAnns: Annotation[] = [];
+    const rectList: { x: number; y: number; width: number; height: number }[] = [];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
     for (const cr of clientRects) {
       const x = (cr.left - canvasRect.left) / s;
       const y = (cr.top - canvasRect.top) / s;
       const w = cr.width / s;
       const h = cr.height / s;
       if (w <= 0 || h <= 0) continue;
-
-      if (action === "highlight") {
-        newAnns.push({
-          id: `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          type: "rect",
-          x,
-          y,
-          width: w,
-          height: h,
-          color: "transparent",
-          fillColor: currentColor && currentColor.startsWith("rgba") ? currentColor : "rgba(250, 204, 21, 0.45)",
-          opacity: 0.85,
-        });
-      } else if (action === "underline") {
-        newAnns.push({
-          id: `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          type: "line",
-          startX: x,
-          startY: y + h - 1,
-          endX: x + w,
-          endY: y + h - 1,
-          color: currentColor && currentColor !== "transparent" ? currentColor : "#dc2626",
-          strokeWidth: 2,
-          opacity: 1,
-        });
-      } else if (action === "strikethrough") {
-        newAnns.push({
-          id: `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          type: "line",
-          startX: x,
-          startY: y + h / 2,
-          endX: x + w,
-          endY: y + h / 2,
-          color: currentColor && currentColor !== "transparent" ? currentColor : "#dc2626",
-          strokeWidth: 2,
-          opacity: 1,
-        });
-      }
+      rectList.push({ x, y, width: w, height: h });
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w;
+      if (y + h > maxY) maxY = y + h;
     }
 
-    if (newAnns.length > 0) {
-      const list = [...(activeDoc.annotations[targetPage] || []), ...newAnns];
-      activeDoc.annotations[targetPage] = list;
-      setPageAnnotations(activeDoc.id, targetPage, list);
-      notifyPageThumbnailsUpdated(targetPage);
-      if (targetPage === activeDoc.currentPage) {
-        redrawOverlay(list);
-      }
-      sel.removeAllRanges();
-      selectedText = "";
-      selectedTextRect = null;
-      textSelectionAnchor = null;
-      pushToast(
-        action === "highlight" ? "Metin vurgulandı" : action === "underline" ? "Metnin altı çizildi" : "Metnin üstü çizildi",
-        "success"
-      );
+    if (rectList.length === 0) return;
+
+    const annId = `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    let newAnn: Annotation;
+
+    if (action === "highlight") {
+      newAnn = {
+        id: annId,
+        type: "highlighter",
+        rects: rectList,
+        locked: true,
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        color: currentColor && currentColor.startsWith("rgba") ? currentColor : "rgba(250, 204, 21, 0.45)",
+        fillColor: currentColor && currentColor.startsWith("rgba") ? currentColor : "rgba(250, 204, 21, 0.45)",
+        opacity: 0.85,
+      };
+    } else if (action === "underline") {
+      newAnn = {
+        id: annId,
+        type: "underline",
+        rects: rectList,
+        locked: true,
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        color: currentColor && currentColor !== "transparent" ? currentColor : "#dc2626",
+        strokeWidth: 2,
+        opacity: 1,
+      };
+    } else {
+      newAnn = {
+        id: annId,
+        type: "strike",
+        rects: rectList,
+        locked: true,
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        color: currentColor && currentColor !== "transparent" ? currentColor : "#dc2626",
+        strokeWidth: 2,
+        opacity: 1,
+      };
     }
+
+    const list = [...(activeDoc.annotations[targetPage] || []), newAnn];
+    activeDoc.annotations[targetPage] = list;
+    setPageAnnotations(activeDoc.id, targetPage, list);
+    notifyPageThumbnailsUpdated(targetPage);
+    if (targetPage === activeDoc.currentPage) {
+      redrawOverlay(list);
+    }
+    sel.removeAllRanges();
+    selectedText = "";
+    selectedTextRect = null;
+    textSelectionAnchor = null;
+    pushToast(
+      action === "highlight" ? "Metin vurgulandı" : action === "underline" ? "Metnin altı çizildi" : "Metnin üstü çizildi",
+      "success"
+    );
   }
 
   function handleContinuousScroll() {
@@ -1326,9 +1421,10 @@
       updateDocPage(activeDoc.id, closestPage);
     }
 
+    const buf = activeDoc.pageCount <= 25 ? activeDoc.pageCount : 4;
     visiblePageRange = {
-      start: Math.max(1, closestPage - 2),
-      end: Math.min(activeDoc.pageCount, closestPage + 2),
+      start: Math.max(1, closestPage - buf),
+      end: Math.min(activeDoc.pageCount, closestPage + buf),
     };
   }
 
@@ -1359,6 +1455,21 @@
   }
 
   function getAnnotationBounds(item: Annotation): { x: number; y: number; width: number; height: number } | null {
+    if (item.rects && item.rects.length > 0) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const r of item.rects) {
+        if (r.x < minX) minX = r.x;
+        if (r.y < minY) minY = r.y;
+        if (r.x + r.width > maxX) maxX = r.x + r.width;
+        if (r.y + r.height > maxY) maxY = r.y + r.height;
+      }
+      return {
+        x: minX,
+        y: minY,
+        width: Math.max(12, maxX - minX),
+        height: Math.max(12, maxY - minY),
+      };
+    }
     if (item.type === "rect" || item.type === "redact" || item.type === "image" || item.type === "text" || item.type === "circle") {
       return {
         x: item.x ?? 0,
@@ -1399,10 +1510,26 @@
   }
 
   function getDistanceToAnnotationEdge(item: Annotation, px: number, py: number): number {
+    if (item.rects && item.rects.length > 0) {
+      for (const r of item.rects) {
+        if (px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height) {
+          return 0;
+        }
+      }
+      let minDist = Infinity;
+      for (const r of item.rects) {
+        const dTop = distanceToSegment(px, py, r.x, r.y, r.x + r.width, r.y);
+        const dBottom = distanceToSegment(px, py, r.x, r.y + r.height, r.x + r.width, r.y + r.height);
+        const dLeft = distanceToSegment(px, py, r.x, r.y, r.x, r.y + r.height);
+        const dRight = distanceToSegment(px, py, r.x + r.width, r.y, r.x + r.width, r.y + r.height);
+        minDist = Math.min(minDist, dTop, dBottom, dLeft, dRight);
+      }
+      return minDist;
+    }
     if (item.type === "line" || item.type === "arrow") {
       return distanceToSegment(px, py, item.startX ?? 0, item.startY ?? 0, item.endX ?? 0, item.endY ?? 0);
     }
-    if (item.type === "rect" || item.type === "redact" || item.type === "image" || item.type === "text") {
+    if (item.type === "rect") {
       const x = item.x ?? 0;
       const y = item.y ?? 0;
       const w = item.width ?? 40;
@@ -1411,7 +1538,22 @@
       const maxX = Math.max(x, x + w);
       const minY = Math.min(y, y + h);
       const maxY = Math.max(y, y + h);
-      // If clicking inside the bounding rectangle, return 0 (direct hit)
+      // ONLY check edge border distances! Never capture inside clicks, allowing text selection inside box!
+      const dTop = distanceToSegment(px, py, minX, minY, maxX, minY);
+      const dBottom = distanceToSegment(px, py, minX, maxY, maxX, maxY);
+      const dLeft = distanceToSegment(px, py, minX, minY, minX, maxY);
+      const dRight = distanceToSegment(px, py, maxX, minY, maxX, maxY);
+      return Math.min(dTop, dBottom, dLeft, dRight);
+    }
+    if (item.type === "redact" || item.type === "image" || item.type === "text") {
+      const x = item.x ?? 0;
+      const y = item.y ?? 0;
+      const w = item.width ?? 40;
+      const h = item.height ?? 30;
+      const minX = Math.min(x, x + w);
+      const maxX = Math.max(x, x + w);
+      const minY = Math.min(y, y + h);
+      const maxY = Math.max(y, y + h);
       if (px >= minX && px <= maxX && py >= minY && py <= maxY) return 0;
       const dTop = distanceToSegment(px, py, minX, minY, maxX, minY);
       const dBottom = distanceToSegment(px, py, minX, maxY, maxX, maxY);
@@ -1430,11 +1572,9 @@
       const cy = minY + Math.abs(h) / 2;
       const rx = Math.max(1, Math.abs(w) / 2);
       const ry = Math.max(1, Math.abs(h) / 2);
-      const normDist = ((px - cx) / rx) ** 2 + ((py - cy) / ry) ** 2;
-      // If clicking inside the circle / ellipse, return 0 (direct hit)
-      if (normDist <= 1.0) return 0;
       const avgR = (rx + ry) / 2;
       const distFromCenter = Math.hypot(px - cx, py - cy);
+      // ONLY check circumference edge! Never capture inside clicks!
       return Math.abs(distFromCenter - avgR);
     }
     if (item.type === "stroke" || item.type === "highlighter") {
@@ -1456,7 +1596,7 @@
 
   function findHitAnnotation(pos: { x: number; y: number }, list: Annotation[]): Annotation | null {
     let bestItem: Annotation | null = null;
-    let minDistance = 14;
+    let minDistance = 18; // 18px edge tolerance for easy shape grabbing
 
     for (let i = list.length - 1; i >= 0; i--) {
       const a = list[i];
@@ -2031,11 +2171,9 @@
       if (dragOverSidebarPage && dragOverSidebarPage !== activeDoc.currentPage) {
         const targetPage = dragOverSidebarPage;
         dragOverSidebarPage = null;
-        transferSelectedToPage(targetPage, "current");
+        transferSelectedToPage(targetPage, "center");
         isDraggingItem = false;
         isPointerDown = false;
-        pushToast(`Nesne Sayfa ${targetPage}'e aktarıldı`, "success");
-        document.getElementById(`continuous-page-${targetPage}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         return;
       }
       dragOverSidebarPage = null;
@@ -2320,6 +2458,34 @@
           tempImg.src = item.imageData;
           item.imageEl = tempImg;
         }
+      } else if (item.rects && item.rects.length > 0) {
+        if (item.opacity !== undefined) overlayCtx.globalAlpha = item.opacity;
+        if (item.type === "underline") {
+          overlayCtx.strokeStyle = item.color || "#dc2626";
+          overlayCtx.lineWidth = item.strokeWidth || 2;
+          overlayCtx.beginPath();
+          for (const r of item.rects) {
+            const ly = r.y + r.height - 1;
+            overlayCtx.moveTo(r.x, ly);
+            overlayCtx.lineTo(r.x + r.width, ly);
+          }
+          overlayCtx.stroke();
+        } else if (item.type === "strike") {
+          overlayCtx.strokeStyle = item.color || "#dc2626";
+          overlayCtx.lineWidth = item.strokeWidth || 2;
+          overlayCtx.beginPath();
+          for (const r of item.rects) {
+            const ly = r.y + r.height / 2;
+            overlayCtx.moveTo(r.x, ly);
+            overlayCtx.lineTo(r.x + r.width, ly);
+          }
+          overlayCtx.stroke();
+        } else if (item.type === "highlighter") {
+          overlayCtx.fillStyle = item.fillColor || item.color || "rgba(250, 204, 21, 0.45)";
+          for (const r of item.rects) {
+            overlayCtx.fillRect(r.x, r.y, r.width, r.height);
+          }
+        }
       }
 
       overlayCtx.restore();
@@ -2359,19 +2525,21 @@
             overlayCtx.lineWidth = 1.5 / activeDoc.scale;
             overlayCtx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
 
-            // 8 circular resize handles matching user reference screenshot
-            const handles = getResizeHandles(bounds);
-            const handleRadius = 4.5 / activeDoc.scale;
-            const handleLineWidth = 1.5 / activeDoc.scale;
+            // 8 circular resize handles matching user reference screenshot (only if not locked)
+            if (!selectedItem.locked) {
+              const handles = getResizeHandles(bounds);
+              const handleRadius = 4.5 / activeDoc.scale;
+              const handleLineWidth = 1.5 / activeDoc.scale;
 
-            for (const h of handles) {
-              overlayCtx.beginPath();
-              overlayCtx.arc(h.x, h.y, handleRadius, 0, Math.PI * 2);
-              overlayCtx.fillStyle = "#ffffff";
-              overlayCtx.fill();
-              overlayCtx.strokeStyle = "#2563eb";
-              overlayCtx.lineWidth = handleLineWidth;
-              overlayCtx.stroke();
+              for (const h of handles) {
+                overlayCtx.beginPath();
+                overlayCtx.arc(h.x, h.y, handleRadius, 0, Math.PI * 2);
+                overlayCtx.fillStyle = "#ffffff";
+                overlayCtx.fill();
+                overlayCtx.strokeStyle = "#2563eb";
+                overlayCtx.lineWidth = handleLineWidth;
+                overlayCtx.stroke();
+              }
             }
             overlayCtx.restore();
           }
@@ -2439,10 +2607,6 @@
 
   async function handleRemoveWatermarkApplyDirectly() {
     if (!activeDoc) return;
-    if (activeDoc.cleanPdfBytes) {
-      pushToast("Bu belgedeki filigran zaten temizlendi.", "info");
-      return;
-    }
     isRemovingWatermark = true;
     try {
       // Snapshot state for Undo before applying watermark removal
@@ -2465,6 +2629,7 @@
       activeDoc.cleanPdfBytes = safeCleanBytes;
       activeDoc.hasUnsavedChanges = true;
       markDocumentModified(activeDoc.id, safeCleanBytes);
+      docVersion++;
       await renderCurrentPage();
       notifyDocThumbnailsUpdated();
       showRemoveWatermarkModal = false;
@@ -3833,7 +3998,7 @@
                   : activeDoc.currentPage === p
                     ? 'border-indigo-600 bg-indigo-50/70 shadow-sm ring-1 ring-indigo-500/30 dark:bg-indigo-950/40'
                     : 'border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900'}"
-              on:click={() => setPage(p)}
+              on:click={() => setPage(p, false, undefined, true)}
               on:mouseenter={() => {
                 if (isDraggingItem && selectedAnnotationIds.length > 0 && activeDoc && activeDoc.currentPage !== p) {
                   dragOverSidebarPage = p;
@@ -3846,7 +4011,7 @@
               }}
               on:mouseup={() => {
                 if (isDraggingItem && selectedAnnotationIds.length > 0 && activeDoc && activeDoc.currentPage !== p) {
-                  transferSelectedToPage(p, "current");
+                  transferSelectedToPage(p, "center");
                 }
               }}
             >

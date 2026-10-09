@@ -21,6 +21,7 @@
   let pageDims = { width: 595, height: 842 }; // Standard A4 default points
   let renderedScale = 0;
   let isRendered = false;
+  let lastHandle: PdfDocHandle | null = null;
   let links: PdfLink[] = [];
 
   onMount(async () => {
@@ -37,7 +38,23 @@
   $: pagePixelWidth = Math.round(pageDims.width * scale);
   $: pagePixelHeight = Math.round(pageDims.height * scale);
 
-  $: if (isVisible && (renderedScale !== scale || !isRendered)) {
+  let lastCanvasEl: HTMLCanvasElement | null = null;
+
+  $: if (handle !== lastHandle) {
+    lastHandle = handle;
+    isRendered = false;
+    if (isVisible) {
+      tick().then(renderPageContent);
+    }
+  }
+
+  $: if (!isVisible) {
+    isRendered = false;
+    renderedScale = 0;
+  }
+
+  $: if (isVisible && canvasEl && (renderedScale !== scale || !isRendered || canvasEl !== lastCanvasEl)) {
+    lastCanvasEl = canvasEl;
     renderedScale = scale;
     tick().then(renderPageContent);
   }
@@ -195,6 +212,33 @@
         try {
           ctx.drawImage(ann.imageEl, x, y, w, h);
         } catch {}
+      } else if (ann.rects && ann.rects.length > 0) {
+        if (ann.type === "underline") {
+          ctx.strokeStyle = ann.color || "#dc2626";
+          ctx.lineWidth = Math.max(1.5, (ann.strokeWidth || 2) * s);
+          ctx.beginPath();
+          for (const r of ann.rects) {
+            const ly = (r.y + r.height - 1) * s;
+            ctx.moveTo(r.x * s, ly);
+            ctx.lineTo((r.x + r.width) * s, ly);
+          }
+          ctx.stroke();
+        } else if (ann.type === "strike") {
+          ctx.strokeStyle = ann.color || "#dc2626";
+          ctx.lineWidth = Math.max(1.5, (ann.strokeWidth || 2) * s);
+          ctx.beginPath();
+          for (const r of ann.rects) {
+            const ly = (r.y + r.height / 2) * s;
+            ctx.moveTo(r.x * s, ly);
+            ctx.lineTo((r.x + r.width) * s, ly);
+          }
+          ctx.stroke();
+        } else if (ann.type === "highlighter") {
+          ctx.fillStyle = ann.fillColor || ann.color || "rgba(250, 204, 21, 0.45)";
+          for (const r of ann.rects) {
+            ctx.fillRect(r.x * s, r.y * s, r.width * s, r.height * s);
+          }
+        }
       }
       ctx.restore();
     }
@@ -205,7 +249,7 @@
 <div
   id="continuous-page-{page}"
   data-page={page}
-  class="relative mb-6 flex flex-col items-center transition-all {isCurrentPage ? 'ring-2 ring-indigo-500/80 rounded-lg p-1 bg-indigo-50/20 dark:bg-indigo-950/20' : 'p-1 cursor-pointer'}"
+  class="relative mb-2 flex flex-col items-center transition-all {isCurrentPage ? 'ring-2 ring-indigo-500/80 rounded-lg p-1 bg-indigo-50/20 dark:bg-indigo-950/20' : 'p-1 cursor-pointer'}"
   on:mousedown={(e) => {
     if (onMouseDownPage) {
       onMouseDownPage(page, e);
@@ -218,12 +262,12 @@
   }}
 >
   <!-- Page Header Tag -->
-  <div class="mb-1.5 flex items-center justify-between w-full max-w-full px-2 text-[11px] text-zinc-400 dark:text-zinc-500 select-none">
+  <div class="mb-0.5 flex items-center justify-between w-full max-w-full px-2 text-[10px] text-zinc-400 dark:text-zinc-500 select-none">
     <span class="inline-flex items-center gap-1 font-semibold {isCurrentPage ? 'text-indigo-600 dark:text-indigo-400' : ''}">
-      <FileText size={12} /> Sayfa {page}
+      <FileText size={11} /> Sayfa {page}
     </span>
     {#if annotations.length > 0}
-      <span class="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 px-1.5 py-0.2 rounded-full">
+      <span class="text-[9px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 px-1.5 py-0.2 rounded-full">
         {annotations.length} düzenleme
       </span>
     {/if}

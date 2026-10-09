@@ -45,6 +45,13 @@ export function calculateAnnotationsBoundingBox(
       minY = Math.min(minY, sy - 15, ey - 15);
       maxX = Math.max(maxX, sx + 15, ex + 15);
       maxY = Math.max(maxY, sy + 15, ey + 15);
+    } else if (item.rects && item.rects.length > 0) {
+      for (const r of item.rects) {
+        minX = Math.min(minX, r.x - padding);
+        minY = Math.min(minY, r.y - padding);
+        maxX = Math.max(maxX, r.x + r.width + padding);
+        maxY = Math.max(maxY, r.y + r.height + padding);
+      }
     } else {
       const x = item.x ?? 0;
       const y = item.y ?? 0;

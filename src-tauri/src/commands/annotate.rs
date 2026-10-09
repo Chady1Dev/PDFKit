@@ -900,12 +900,12 @@ fn clean_bt_block(
                     });
                     cur_ops = vec![op.clone()];
                     cur_is_diag = false;
-                    cur_y = cur_y.map(|y| y + dy);
+                    cur_y = Some(cur_y.unwrap_or(0.0) + dy);
                     cur_text = String::new();
                     cur_has_text = false;
                 } else {
                     cur_ops.push(op.clone());
-                    cur_y = cur_y.map(|y| y + dy);
+                    cur_y = Some(cur_y.unwrap_or(0.0) + dy);
                 }
             }
             "T*" => {
@@ -1239,9 +1239,21 @@ fn clean_operations(
 
             if found_et {
                 let bt_slice = &ops[i..=j];
+                let is_wm_context = is_block_watermark_context(bt_slice, deleted_xobjects, target);
+                let text_count = bt_slice
+                    .iter()
+                    .filter(|o| matches!(o.operator.as_str(), "Tj" | "TJ" | "'" | "\""))
+                    .count();
+
+                if is_wm_context && !clean_page_numbers && zones.all() && text_count <= 50 {
+                    modified = true;
+                    i = j + 1;
+                    continue;
+                }
+
                 let (cleaned_bt, was_cleaned) = clean_bt_block(
                     bt_slice,
-                    false,
+                    is_wm_context,
                     target,
                     y0,
                     height,

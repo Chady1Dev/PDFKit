@@ -77,7 +77,17 @@
         const p = event.payload;
         progress = p.percent;
         if (p.current > 0 && p.total > 0) {
-          progressText = `Sayfa ${p.current} / ${p.total} (%${p.percent})`;
+          const stageName =
+            p.stage === "parse"
+              ? "Sayfa Çözümleniyor"
+              : p.stage === "write"
+                ? "Word Sayfası Oluşturuluyor"
+                : p.stage === "pptx_page"
+                  ? "Slayt Oluşturuluyor"
+                  : "İşleniyor";
+          progressText = `${stageName}: Sayfa ${p.current} / ${p.total} (%${p.percent})`;
+        } else if (p.stage === "done" || p.percent >= 100) {
+          progressText = "Dönüştürme Tamamlandı (%100)";
         } else {
           progressText = `Dönüştürme başlatılıyor...`;
         }

@@ -167,6 +167,34 @@ export function drawSingleAnnotation(
         item.height || 60
       );
     }
+  } else if (item.rects && item.rects.length > 0) {
+    if (item.opacity !== undefined) offCtx.globalAlpha = item.opacity;
+    if (item.type === "underline") {
+      offCtx.strokeStyle = item.color || "#dc2626";
+      offCtx.lineWidth = item.strokeWidth || 2;
+      offCtx.beginPath();
+      for (const r of item.rects) {
+        const ly = r.y + r.height - 1;
+        offCtx.moveTo(r.x, ly);
+        offCtx.lineTo(r.x + r.width, ly);
+      }
+      offCtx.stroke();
+    } else if (item.type === "strike") {
+      offCtx.strokeStyle = item.color || "#dc2626";
+      offCtx.lineWidth = item.strokeWidth || 2;
+      offCtx.beginPath();
+      for (const r of item.rects) {
+        const ly = r.y + r.height / 2;
+        offCtx.moveTo(r.x, ly);
+        offCtx.lineTo(r.x + r.width, ly);
+      }
+      offCtx.stroke();
+    } else if (item.type === "highlighter") {
+      offCtx.fillStyle = item.fillColor || item.color || "rgba(250, 204, 21, 0.45)";
+      for (const r of item.rects) {
+        offCtx.fillRect(r.x, r.y, r.width, r.height);
+      }
+    }
   }
   offCtx.restore();
 }
