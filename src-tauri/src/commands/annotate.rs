@@ -181,6 +181,18 @@ pub async fn remove_watermark_bytes(
 pub async fn write_pdf_bytes(path: String, data: Vec<u8>) -> Result<OpResult, PdfError> {
     tauri::async_runtime::spawn_blocking(move || {
         let p = Path::new(&path);
+        let ext = p
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_default();
+
+        if ext != "pdf" {
+            return Err(PdfError::Custom(
+                "Güvenlik kısıtlaması: Yalnızca .pdf uzantılı dosyalara yazma izni vardır.".to_string(),
+            ));
+        }
+
         if let Some(parent) = p.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
@@ -2006,6 +2018,10 @@ pub fn apply_overlays(
     if has_redactions {
         // Physical purge of all orphaned vector streams, text glyphs, and unreferenced resources
         // ensuring zero remnant of redacted text remains in the document object table.
+        doc.trailer.remove(b"Info");
+        if let Ok(catalog) = doc.catalog_mut() {
+            catalog.remove(b"Metadata");
+        }
         doc.prune_objects();
     }
 
