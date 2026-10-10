@@ -930,10 +930,12 @@
     }
     autoScrollRafId = requestAnimationFrame(autoScrollStep);
 
-    window.addEventListener("mousemove", onAutoScrollMouseMove, { passive: false });
-    window.addEventListener("mouseup", onAutoScrollMouseUp, { passive: false });
-    window.addEventListener("wheel", onAutoScrollWheel, { passive: false });
-    window.addEventListener("keydown", onAutoScrollKeyDown, { passive: false });
+    window.addEventListener("mousemove", onAutoScrollMouseMove, { passive: false, capture: true });
+    window.addEventListener("pointermove", onAutoScrollMouseMove, { passive: false, capture: true });
+    window.addEventListener("mouseup", onAutoScrollMouseUp, { passive: false, capture: true });
+    window.addEventListener("pointerup", onAutoScrollMouseUp, { passive: false, capture: true });
+    window.addEventListener("wheel", onAutoScrollWheel, { passive: false, capture: true });
+    window.addEventListener("keydown", onAutoScrollKeyDown, { passive: false, capture: true });
   }
 
   function stopAutoScroll() {
@@ -943,13 +945,15 @@
       cancelAnimationFrame(autoScrollRafId);
       autoScrollRafId = null;
     }
-    window.removeEventListener("mousemove", onAutoScrollMouseMove);
-    window.removeEventListener("mouseup", onAutoScrollMouseUp);
-    window.removeEventListener("wheel", onAutoScrollWheel);
-    window.removeEventListener("keydown", onAutoScrollKeyDown);
+    window.removeEventListener("mousemove", onAutoScrollMouseMove, { capture: true });
+    window.removeEventListener("pointermove", onAutoScrollMouseMove, { capture: true });
+    window.removeEventListener("mouseup", onAutoScrollMouseUp, { capture: true });
+    window.removeEventListener("pointerup", onAutoScrollMouseUp, { capture: true });
+    window.removeEventListener("wheel", onAutoScrollWheel, { capture: true });
+    window.removeEventListener("keydown", onAutoScrollKeyDown, { capture: true });
   }
 
-  function onAutoScrollMouseMove(e: MouseEvent) {
+  function onAutoScrollMouseMove(e: MouseEvent | PointerEvent) {
     if (!isAutoScrolling) return;
     e.preventDefault();
     autoScrollCurrentX = e.clientX;
@@ -969,7 +973,7 @@
     }
   }
 
-  function onAutoScrollMouseUp(e: MouseEvent) {
+  function onAutoScrollMouseUp(e: MouseEvent | PointerEvent) {
     if (!isAutoScrolling) return;
 
     if (e.button === 1) {
@@ -1002,23 +1006,46 @@
     }
   }
 
-  function handleContainerMouseDownCapture(e: MouseEvent) {
-    if (e.button === 1) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (isAutoScrolling) {
+  let lastMiddleTriggerTime = 0;
+
+  function handleGlobalMiddleDown(e: MouseEvent | PointerEvent) {
+    if (e.button !== 1) {
+      if (isAutoScrolling && (e.button === 0 || e.button === 2)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
         stopAutoScroll();
-      } else {
-        startAutoScroll(e);
       }
       return;
     }
 
-    if (isAutoScrolling) {
+    if (!canvasContainer) return;
+    const rect = canvasContainer.getBoundingClientRect();
+    const inViewport = (
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    );
+    if (!inViewport) return;
+
+    const now = performance.now();
+    if (now - lastMiddleTriggerTime < 100) {
       e.preventDefault();
       e.stopPropagation();
-      stopAutoScroll();
+      e.stopImmediatePropagation?.();
       return;
+    }
+    lastMiddleTriggerTime = now;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation?.();
+
+    if (isAutoScrolling) {
+      stopAutoScroll();
+    } else {
+      startAutoScroll(e);
     }
   }
 
@@ -1033,14 +1060,18 @@
   }
 
   onMount(() => {
-    window.addEventListener("auxclick", preventAuxDefault, { passive: false });
+    window.addEventListener("mousedown", handleGlobalMiddleDown, { capture: true, passive: false });
+    window.addEventListener("pointerdown", handleGlobalMiddleDown, { capture: true, passive: false });
+    window.addEventListener("auxclick", preventAuxDefault, { capture: true, passive: false });
     window.addEventListener("click", handleWindowClick);
     document.addEventListener("selectionchange", handleTextSelectionChange);
   });
 
   onDestroy(() => {
     stopAutoScroll();
-    window.removeEventListener("auxclick", preventAuxDefault);
+    window.removeEventListener("mousedown", handleGlobalMiddleDown, { capture: true });
+    window.removeEventListener("pointerdown", handleGlobalMiddleDown, { capture: true });
+    window.removeEventListener("auxclick", preventAuxDefault, { capture: true });
     window.removeEventListener("click", handleWindowClick);
     document.removeEventListener("selectionchange", handleTextSelectionChange);
     window.removeEventListener("mousemove", onWindowMouseMove);
@@ -4190,7 +4221,6 @@
         bind:this={canvasContainer}
         on:wheel={handleContainerWheel}
         on:scroll={handleContinuousScroll}
-        on:mousedown|capture={handleContainerMouseDownCapture}
         on:auxclick={(e) => { if (e.button === 1) e.preventDefault(); }}
         style={isAutoScrolling ? `cursor: ${canvasCursor} !important; user-select: none;` : ""}
         class="relative flex-1 overflow-auto bg-zinc-200/60 p-6 dark:bg-zinc-950"

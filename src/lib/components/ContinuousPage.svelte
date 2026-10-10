@@ -251,6 +251,7 @@
   data-page={page}
   class="relative mb-2 flex flex-col items-center transition-all {isCurrentPage ? 'ring-2 ring-indigo-500/80 rounded-lg p-1 bg-indigo-50/20 dark:bg-indigo-950/20' : 'p-1 cursor-pointer'}"
   on:mousedown={(e) => {
+    if (e.button === 1) return;
     if (onMouseDownPage) {
       onMouseDownPage(page, e);
     } else if (!isCurrentPage) {
