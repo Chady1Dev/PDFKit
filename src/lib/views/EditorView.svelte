@@ -649,6 +649,18 @@
   async function handlePageMouseDown(page: number, e: MouseEvent) {
     if (!activeDoc) return;
 
+    if (isAutoScrolling) {
+      e.preventDefault();
+      e.stopPropagation();
+      stopAutoScroll();
+      return;
+    }
+
+    if (e.button === 1) {
+      startAutoScroll(e);
+      return;
+    }
+
     if (currentTool === "select") {
       const pos = getPagePos(e, page);
       if (!pos) return;
@@ -854,54 +866,159 @@
     pageVersions = { ...pageVersions, [page]: (pageVersions[page] || 0) + 1 };
   }
 
-  // Middle-mouse button free-pan (scroll wheel hold) across all tools
-  let isMiddlePanning = false;
-  let middlePanStartX = 0;
-  let middlePanStartY = 0;
-  let middlePanStartScrollLeft = 0;
-  let middlePanStartScrollTop = 0;
+  // --- Middle-Mouse Button Auto-Scroll (Windows / Acrobat Style Pan) ---
+  let isAutoScrolling = false;
+  let autoScrollAnchorX = 0;
+  let autoScrollAnchorY = 0;
+  let autoScrollCurrentX = 0;
+  let autoScrollCurrentY = 0;
+  let autoScrollRafId: number | null = null;
+  let autoScrollMouseDownTime = 0;
+  let autoScrollMovedFar = false;
 
-  function handleMiddlePanMouseDown(e: MouseEvent) {
-    if (e.button === 1) {
-      e.preventDefault();
-      e.stopPropagation();
-      isMiddlePanning = true;
-      middlePanStartX = e.clientX;
-      middlePanStartY = e.clientY;
-      if (canvasContainer) {
-        middlePanStartScrollLeft = canvasContainer.scrollLeft;
-        middlePanStartScrollTop = canvasContainer.scrollTop;
-      }
-      window.addEventListener("mousemove", handleMiddlePanMouseMove, { passive: false });
-      window.addEventListener("mouseup", handleMiddlePanMouseUp, { passive: false });
+  const AUTO_SCROLL_DEADZONE = 12; // px before movement starts
+
+  let autoScrollDeltaX = 0;
+  let autoScrollDeltaY = 0;
+  let autoScrollDirUp = false;
+  let autoScrollDirDown = false;
+  let autoScrollDirLeft = false;
+  let autoScrollDirRight = false;
+
+  function computeAutoScrollVelocity(delta: number, deadzone = AUTO_SCROLL_DEADZONE, maxSpeed = 50): number {
+    const abs = Math.abs(delta);
+    if (abs <= deadzone) return 0;
+    const effective = abs - deadzone;
+    return Math.sign(delta) * Math.min(maxSpeed, Math.pow(effective / 7, 1.35));
+  }
+
+  function autoScrollStep() {
+    if (!isAutoScrolling || !canvasContainer) {
+      autoScrollRafId = null;
+      return;
+    }
+
+    const vy = computeAutoScrollVelocity(autoScrollDeltaY, AUTO_SCROLL_DEADZONE, 50);
+    const vx = computeAutoScrollVelocity(autoScrollDeltaX, AUTO_SCROLL_DEADZONE, 35);
+
+    if (vy !== 0) {
+      canvasContainer.scrollTop += vy;
+    }
+    if (vx !== 0) {
+      canvasContainer.scrollLeft += vx;
+    }
+
+    autoScrollRafId = requestAnimationFrame(autoScrollStep);
+  }
+
+  function startAutoScroll(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    isAutoScrolling = true;
+    autoScrollAnchorX = e.clientX;
+    autoScrollAnchorY = e.clientY;
+    autoScrollCurrentX = e.clientX;
+    autoScrollCurrentY = e.clientY;
+    autoScrollDeltaX = 0;
+    autoScrollDeltaY = 0;
+    autoScrollDirUp = false;
+    autoScrollDirDown = false;
+    autoScrollDirLeft = false;
+    autoScrollDirRight = false;
+    autoScrollMouseDownTime = performance.now();
+    autoScrollMovedFar = false;
+
+    if (autoScrollRafId !== null) {
+      cancelAnimationFrame(autoScrollRafId);
+    }
+    autoScrollRafId = requestAnimationFrame(autoScrollStep);
+
+    window.addEventListener("mousemove", onAutoScrollMouseMove, { passive: false });
+    window.addEventListener("mouseup", onAutoScrollMouseUp, { passive: false });
+    window.addEventListener("wheel", onAutoScrollWheel, { passive: false });
+    window.addEventListener("keydown", onAutoScrollKeyDown, { passive: false });
+  }
+
+  function stopAutoScroll() {
+    if (!isAutoScrolling) return;
+    isAutoScrolling = false;
+    if (autoScrollRafId !== null) {
+      cancelAnimationFrame(autoScrollRafId);
+      autoScrollRafId = null;
+    }
+    window.removeEventListener("mousemove", onAutoScrollMouseMove);
+    window.removeEventListener("mouseup", onAutoScrollMouseUp);
+    window.removeEventListener("wheel", onAutoScrollWheel);
+    window.removeEventListener("keydown", onAutoScrollKeyDown);
+  }
+
+  function onAutoScrollMouseMove(e: MouseEvent) {
+    if (!isAutoScrolling) return;
+    e.preventDefault();
+    autoScrollCurrentX = e.clientX;
+    autoScrollCurrentY = e.clientY;
+
+    autoScrollDeltaX = autoScrollCurrentX - autoScrollAnchorX;
+    autoScrollDeltaY = autoScrollCurrentY - autoScrollAnchorY;
+
+    autoScrollDirUp = autoScrollDeltaY < -AUTO_SCROLL_DEADZONE;
+    autoScrollDirDown = autoScrollDeltaY > AUTO_SCROLL_DEADZONE;
+    autoScrollDirLeft = autoScrollDeltaX < -AUTO_SCROLL_DEADZONE;
+    autoScrollDirRight = autoScrollDeltaX > AUTO_SCROLL_DEADZONE;
+
+    const dist = Math.hypot(autoScrollDeltaX, autoScrollDeltaY);
+    if (dist > AUTO_SCROLL_DEADZONE) {
+      autoScrollMovedFar = true;
     }
   }
 
-  function handleMiddlePanMouseMove(e: MouseEvent) {
-    if (!isMiddlePanning || !canvasContainer) return;
-    e.preventDefault();
-    const dx = e.clientX - middlePanStartX;
-    const dy = e.clientY - middlePanStartY;
-    canvasContainer.scrollLeft = middlePanStartScrollLeft - dx;
-    canvasContainer.scrollTop = middlePanStartScrollTop - dy;
-  }
+  function onAutoScrollMouseUp(e: MouseEvent) {
+    if (!isAutoScrolling) return;
 
-  function handleMiddlePanMouseUp(e: MouseEvent) {
-    if (e.button === 1 || isMiddlePanning) {
-      if (isMiddlePanning) {
+    if (e.button === 1) {
+      const elapsed = performance.now() - autoScrollMouseDownTime;
+      // If user held and moved (hold-to-pan mode), release stops auto-scroll!
+      if (autoScrollMovedFar || elapsed > 250) {
         e.preventDefault();
         e.stopPropagation();
+        stopAutoScroll();
       }
-      isMiddlePanning = false;
-      window.removeEventListener("mousemove", handleMiddlePanMouseMove);
-      window.removeEventListener("mouseup", handleMiddlePanMouseUp);
+      // If quick click/tap, keep active in toggle mode until next click
+    } else {
+      e.preventDefault();
+      e.stopPropagation();
+      stopAutoScroll();
     }
   }
 
-  function handleContainerMouseDown(e: MouseEvent) {
-    if (e.button === 1) {
-      handleMiddlePanMouseDown(e);
+  function onAutoScrollWheel(e: WheelEvent) {
+    stopAutoScroll();
+  }
+
+  function onAutoScrollKeyDown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      stopAutoScroll();
     }
+  }
+
+  function handleContainerMouseDownCapture(e: MouseEvent) {
+    if (isAutoScrolling) {
+      e.preventDefault();
+      e.stopPropagation();
+      stopAutoScroll();
+      return;
+    }
+    if (e.button === 1) {
+      startAutoScroll(e);
+    }
+  }
+
+  function handleOverlayMouseDown(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    stopAutoScroll();
   }
 
   function preventAuxDefault(e: MouseEvent) {
@@ -915,11 +1032,10 @@
   });
 
   onDestroy(() => {
+    stopAutoScroll();
     window.removeEventListener("auxclick", preventAuxDefault);
     window.removeEventListener("click", handleWindowClick);
     document.removeEventListener("selectionchange", handleTextSelectionChange);
-    window.removeEventListener("mousemove", handleMiddlePanMouseMove);
-    window.removeEventListener("mouseup", handleMiddlePanMouseUp);
     window.removeEventListener("mousemove", onWindowMouseMove);
     window.removeEventListener("mouseup", onWindowMouseUp);
     if (pageChangeBadgeTimer) clearTimeout(pageChangeBadgeTimer);
@@ -927,7 +1043,17 @@
   });
 
   $: canvasCursor = (() => {
-    if (isMiddlePanning) return "grabbing";
+    if (isAutoScrolling) {
+      if (autoScrollDirUp && autoScrollDirLeft) return "nw-resize";
+      if (autoScrollDirUp && autoScrollDirRight) return "ne-resize";
+      if (autoScrollDirDown && autoScrollDirLeft) return "sw-resize";
+      if (autoScrollDirDown && autoScrollDirRight) return "se-resize";
+      if (autoScrollDirUp) return "n-resize";
+      if (autoScrollDirDown) return "s-resize";
+      if (autoScrollDirLeft) return "w-resize";
+      if (autoScrollDirRight) return "e-resize";
+      return "all-scroll";
+    }
     if (currentTool === "select") {
       if (isResizingItem && activeResizeHandle) {
         const map: Record<ResizeHandleType, string> = {
@@ -1676,8 +1802,14 @@
   }
 
   function onMouseDown(e: MouseEvent) {
+    if (isAutoScrolling) {
+      e.preventDefault();
+      e.stopPropagation();
+      stopAutoScroll();
+      return;
+    }
     if (e.button === 1) {
-      handleMiddlePanMouseDown(e);
+      startAutoScroll(e);
       return;
     }
     if (e.button !== 0) return;
@@ -4055,9 +4187,9 @@
         bind:this={canvasContainer}
         on:wheel={handleContainerWheel}
         on:scroll={handleContinuousScroll}
-        on:mousedown={handleContainerMouseDown}
+        on:mousedown|capture={handleContainerMouseDownCapture}
         on:auxclick={(e) => { if (e.button === 1) e.preventDefault(); }}
-        style={isMiddlePanning ? "cursor: grabbing !important; user-select: none;" : ""}
+        style={isAutoScrolling ? `cursor: ${canvasCursor} !important; user-select: none;` : ""}
         class="relative flex-1 overflow-auto bg-zinc-200/60 p-6 dark:bg-zinc-950"
       >
         {#if showSearchBar && activeDoc}
@@ -4398,5 +4530,48 @@
         </button>
       </div>
     </div>
+  </div>
+{/if}
+
+{#if isAutoScrolling}
+  <!-- Global capture overlay to lock cursor style and catch all clicks across the entire window -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div
+    class="fixed inset-0 z-[9998] select-none"
+    style="cursor: {canvasCursor};"
+    on:mousedown|stopPropagation|preventDefault={handleOverlayMouseDown}
+    on:mouseup|stopPropagation|preventDefault={onAutoScrollMouseUp}
+    on:contextmenu|preventDefault
+  ></div>
+
+  <!-- Direction Indicator Compass Widget (Fixed at initial middle-click origin point) -->
+  <div
+    class="pointer-events-none fixed z-[9999] flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-indigo-500/80 bg-zinc-900/90 text-white shadow-2xl backdrop-blur-md select-none transition-transform"
+    style="left: {autoScrollAnchorX}px; top: {autoScrollAnchorY}px;"
+  >
+    <!-- Top arrow -->
+    <ChevronUp
+      size={14}
+      class="absolute top-0.5 text-zinc-400 transition-all {autoScrollDirUp ? 'scale-125 text-indigo-400' : 'opacity-40'}"
+    />
+    <!-- Bottom arrow -->
+    <ChevronDown
+      size={14}
+      class="absolute bottom-0.5 text-zinc-400 transition-all {autoScrollDirDown ? 'scale-125 text-indigo-400' : 'opacity-40'}"
+    />
+    <!-- Left arrow -->
+    <ChevronLeft
+      size={12}
+      class="absolute left-0.5 text-zinc-400 transition-all {autoScrollDirLeft ? 'scale-125 text-indigo-400' : 'opacity-30'}"
+    />
+    <!-- Right arrow -->
+    <ChevronRight
+      size={12}
+      class="absolute right-0.5 text-zinc-400 transition-all {autoScrollDirRight ? 'scale-125 text-indigo-400' : 'opacity-30'}"
+    />
+    <!-- Center pivot dot -->
+    <div
+      class="h-2 w-2 rounded-full transition-all {autoScrollDirUp || autoScrollDirDown || autoScrollDirLeft || autoScrollDirRight ? 'bg-indigo-400 scale-90' : 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]'}"
+    ></div>
   </div>
 {/if}
