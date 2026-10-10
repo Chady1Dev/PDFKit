@@ -16,17 +16,22 @@ pub struct PageTextData {
 fn escape_xml(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for c in input.chars() {
+        let code = c as u32;
+        // Valid XML 1.0 characters: 0x9 (tab), 0xA (LF), 0xD (CR), 0x20..=0xD7FF, 0xE000..=0xFFFD, 0x10000..=0x10FFFF
+        if code != 0x9 && code != 0xA && code != 0xD
+            && !(0x20..=0xD7FF).contains(&code)
+            && !(0xE000..=0xFFFD).contains(&code)
+            && !(0x10000..=0x10FFFF).contains(&code)
+        {
+            continue;
+        }
         match c {
             '&' => out.push_str("&amp;"),
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
             '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&apos;"),
-            // Valid XML 1.0 characters: 0x9 (tab), 0xA (LF), 0xD (CR), or >= 0x20
-            c if (c as u32) < 32 && c != '\t' && c != '\n' && c != '\r' => {
-                // strip forbidden ASCII control characters that break Office XML parsers
-            }
-            c => out.push(c),
+            _ => out.push(c),
         }
     }
     out
@@ -897,6 +902,9 @@ pub async fn export_office_document(
                             if err.contains("iptal edildi") || err.contains("Dosya başka bir programda açık") {
                                 return Err(PdfError::Custom(err));
                             }
+                            if pages.is_empty() {
+                                return Err(PdfError::Custom(format!("Word dönüştürme hatası: {}", err)));
+                            }
                         }
                     }
                 }
@@ -906,8 +914,20 @@ pub async fn export_office_document(
         "pptx" => {
             if let Some(ref in_path) = input_path {
                 if Path::new(in_path).exists() {
-                    if let Ok(()) = try_advanced_layout_engine(&app, in_path, &output_path, &fmt) {
-                        return Ok(());
+                    match try_advanced_layout_engine(&app, in_path, &output_path, &fmt) {
+                        Ok(()) => {
+                            eprintln!("[PPTX] Yüksek kaliteli sunum inşası başarıyla tamamlandı.");
+                            return Ok(());
+                        }
+                        Err(err) => {
+                            eprintln!("[PPTX] Gelişmiş motor hatası: {}, yerel OpenXML deneniyor...", err);
+                            if err.contains("iptal edildi") || err.contains("Dosya başka bir programda açık") {
+                                return Err(PdfError::Custom(err));
+                            }
+                            if pages.is_empty() {
+                                return Err(PdfError::Custom(format!("PowerPoint dönüştürme hatası: {}", err)));
+                            }
+                        }
                     }
                 }
             }

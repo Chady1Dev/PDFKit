@@ -36,22 +36,104 @@ def emit_progress(current: int, total: int, percent: int, stage: str = "converti
     print(json.dumps(payload), flush=True)
 
 
+def clean_xml_text(s: str) -> str:
+    """
+    Strips illegal XML 1.0 control characters and invalid Unicode codepoints
+    (e.g. NULL bytes, 0x00-0x1F except tab/newline/carriage-return, surrogates,
+    and non-characters like 0xFFFE, 0xFFFF) to ensure 100% compliance with lxml / Office XML.
+    """
+    if not s:
+        return ""
+    return "".join(
+        c
+        for c in s
+        if ord(c) in (9, 10, 13)
+        or (0x20 <= ord(c) <= 0xD7FF)
+        or (0xE000 <= ord(c) <= 0xFFFD)
+        or (0x10000 <= ord(c) <= 0x10FFFF)
+    )
+
+
 def patch_pdf2docx_unicode():
     """
-    Patches pdf2docx internals to fix is_end_of_english_word bug that ignores
-    non-ASCII/Turkish letters (c.encode().isalnum()).
+    Patches pdf2docx internals:
+    1. Prevents discarding whitespace TextSpans (Spans.restore), restoring missing spaces between words
+       in PDFs with separate spacing spans (LaTeX, InDesign, publisher layouts).
+    2. Inserts spacing between adjacent spans on the same line if a physical gap >= 1.5 pt exists (Line.make_docx).
+    3. Cleans illegal XML characters (TextSpan.make_docx) to avoid lxml XML validation errors.
+    4. Preserves Turkish and Unicode word boundaries across line breaks (Lines.adjust_last_word).
     """
     try:
         import string
         from pdf2docx.text.Lines import Lines
+        from pdf2docx.text.Line import Line
+        from pdf2docx.text.Spans import Spans
         from pdf2docx.text.TextSpan import TextSpan
+        from pdf2docx.image.ImageSpan import ImageSpan
 
+        # 1. Patch Spans.restore so whitespace spans separating words are NEVER dropped
+        def patched_restore(self, raws: list):
+            for raw_span in raws:
+                if "image" in raw_span:
+                    span = ImageSpan(raw_span)
+                else:
+                    span = TextSpan(raw_span)
+                    # Only discard if completely empty string (len 0) and has no style
+                    if not span.text and not span.style:
+                        span = None
+                self.append(span)
+            return self
+
+        Spans.restore = patched_restore
+
+        # 2. Patch Line.make_docx to detect horizontal space gaps between adjacent text spans
+        def patched_line_make_docx(self, p):
+            if self.tab_stop:
+                for _ in range(self.tab_stop):
+                    p.add_run().add_tab()
+
+            prev_text_span = None
+            for span in self.spans:
+                if isinstance(span, TextSpan):
+                    if prev_text_span is not None:
+                        x_gap = span.bbox.x0 - prev_text_span.bbox.x1
+                        if (
+                            x_gap >= 1.5
+                            and not prev_text_span.text.endswith(" ")
+                            and not span.text.startswith(" ")
+                        ):
+                            p.add_run(" ")
+                    span.make_docx(p)
+                    prev_text_span = span
+                else:
+                    prev_text_span = None
+                    span.make_docx(p)
+
+            if self.line_break:
+                p.add_run("\n")
+
+        Line.make_docx = patched_line_make_docx
+
+        # 3. Patch TextSpan.make_docx to clean illegal XML characters
+        orig_span_make_docx = TextSpan.make_docx
+
+        def patched_span_make_docx(self, paragraph):
+            clean_t = clean_xml_text(self.text)
+            if clean_t != self.text:
+                self._text = clean_t
+                if self.chars:
+                    for ch in self.chars:
+                        ch.c = clean_xml_text(ch.c)
+            orig_span_make_docx(self, paragraph)
+
+        TextSpan.make_docx = patched_span_make_docx
+
+        # 4. Patch Lines.adjust_last_word for Turkish and Unicode letters
         punc_ex_hyphen = set(c for c in string.punctuation if c != "-")
 
         def is_word_char(c):
             if not c:
                 return False
-            # Python str.isalnum() returns True for all Unicode alphabetic chars (including ç, ğ, ı, ö, ş, ü)
             return c.isalnum() or (c in punc_ex_hyphen)
 
         def patched_adjust_last_word(self, delete_end_line_hyphen: bool):
@@ -344,12 +426,6 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
 
         for idx, page in enumerate(target_pages):
             slide = prs.slides.add_slide(blank_layout)
-
-            def clean_xml_text(s: str) -> str:
-                if not s:
-                    return ""
-                # Strip illegal XML 1.0 control characters (only \t, \n, \r and >= 0x20 allowed)
-                return "".join(c for c in s if c in ("\t", "\n", "\r") or ord(c) >= 32)
 
             # 1. Detect valid native tables FIRST so their background fills and borders are never mistaken for diagrams
             valid_tables = []
@@ -755,18 +831,21 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
                                 ):
                                     text = " " + text
 
-                            run = p_elem.add_run()
-                            run.text = text
-                            run.font.size = Pt(max(6, s.get("size", 9.5)))
-                            f_name = s.get("font", "").lower()
-                            flags = s.get("flags", 0)
-                            run.font.bold = bool(flags & 4 or "bold" in f_name)
-                            run.font.italic = bool(flags & 2 or "italic" in f_name)
-                            c = s.get("color", 0)
-                            if isinstance(c, int):
-                                run.font.color.rgb = RGBColor(
-                                    (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF
-                                )
+                            try:
+                                run = p_elem.add_run()
+                                run.text = text
+                                run.font.size = Pt(max(6, s.get("size", 9.5)))
+                                f_name = s.get("font", "").lower()
+                                flags = s.get("flags", 0)
+                                run.font.bold = bool(flags & 4 or "bold" in f_name)
+                                run.font.italic = bool(flags & 2 or "italic" in f_name)
+                                c = s.get("color", 0)
+                                if isinstance(c, int):
+                                    run.font.color.rgb = RGBColor(
+                                        (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF
+                                    )
+                            except Exception:
+                                pass
 
             col1_w = (divider_x - 55) if divider_x else None
             col2_w = (page.rect.width - divider_x - 45) if divider_x else None
