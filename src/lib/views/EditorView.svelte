@@ -648,16 +648,12 @@
 
   async function handlePageMouseDown(page: number, e: MouseEvent) {
     if (!activeDoc) return;
+    if (e.button !== 0) return;
 
     if (isAutoScrolling) {
       e.preventDefault();
       e.stopPropagation();
       stopAutoScroll();
-      return;
-    }
-
-    if (e.button === 1) {
-      startAutoScroll(e);
       return;
     }
 
@@ -993,6 +989,9 @@
   }
 
   function onAutoScrollWheel(e: WheelEvent) {
+    if (performance.now() - autoScrollMouseDownTime < 300) {
+      return;
+    }
     stopAutoScroll();
   }
 
@@ -1004,14 +1003,22 @@
   }
 
   function handleContainerMouseDownCapture(e: MouseEvent) {
+    if (e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isAutoScrolling) {
+        stopAutoScroll();
+      } else {
+        startAutoScroll(e);
+      }
+      return;
+    }
+
     if (isAutoScrolling) {
       e.preventDefault();
       e.stopPropagation();
       stopAutoScroll();
       return;
-    }
-    if (e.button === 1) {
-      startAutoScroll(e);
     }
   }
 
@@ -1802,17 +1809,13 @@
   }
 
   function onMouseDown(e: MouseEvent) {
+    if (e.button !== 0) return;
     if (isAutoScrolling) {
       e.preventDefault();
       e.stopPropagation();
       stopAutoScroll();
       return;
     }
-    if (e.button === 1) {
-      startAutoScroll(e);
-      return;
-    }
-    if (e.button !== 0) return;
     if (!activeDoc || !overlayCanvas) return;
     const pos = getCanvasPos(e);
     isPointerDown = true;
