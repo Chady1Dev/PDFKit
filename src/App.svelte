@@ -207,7 +207,7 @@
       class="flex items-center gap-2 px-4 py-4 text-left text-lg font-bold tracking-tight"
       on:click={() => currentView.set("dashboard")}
     >
-      <LayoutGrid size={20} class="text-indigo-600" /> PDFKit
+      <LayoutGrid size={20} class="text-indigo-600" /> PDFkit
     </button>
 
     <div class="flex-1 overflow-y-auto px-3 pb-3">

@@ -1,4 +1,4 @@
-# PDFKit — Sistem Mimarisi, Fonksiyonel ve Teknik Dökümantasyon (Master Reference)
+# PDFkit — Sistem Mimarisi, Fonksiyonel ve Teknik Dökümantasyon (Master Reference)
 
 > **Sürüm:** 0.1.0-release  
 > **Tarih:** Ekim 2026  
@@ -11,13 +11,13 @@
 ## 1. YÖNETİCİ ÖZETİ & PROJE KİMLİĞİ (Project Manifesto)
 
 ### 1.1. Nedir ve Ne Amaçla Doğdu?
-**PDFKit**, modern bilgi çalışanlarının, öğrencilerin, araştırmacıların, avukatların ve kamu görevlilerinin günlük belge akışında karşılaştıkları hantal, pahalı ve gizlilik ihlali yaratan araçlara tepki olarak geliştirilmiş **ultra-hafif, bağımsız ve yerel (local-first) bir PDF çalışma istasyonudur.**
+**PDFkit**, modern bilgi çalışanlarının, öğrencilerin, araştırmacıların, avukatların ve kamu görevlilerinin günlük belge akışında karşılaştıkları hantal, pahalı ve gizlilik ihlali yaratan araçlara tepki olarak geliştirilmiş **ultra-hafif, bağımsız ve yerel (local-first) bir PDF çalışma istasyonudur.**
 
 Geleneksel PDF ekosistemi iki büyük çıkmaz arasına sıkışmıştır:
 1. **Bulut Tabanlı Dönüştürücüler (iLovePDF, Smallpdf vb.):** Belgeleri üçüncü taraf sunuculara yükler. Kişisel veriler, ticari sırlar, sınav soruları veya şirket sözleşmeleri internete çıkar; KVKK ve GDPR açısından ciddi bir güvenlik açığı teşkil eder. Üstelik dosya boyutu ve günlük işlem kotalarıyla kullanıcıyı ücretli aboneliğe zorlar.
 2. **Geleneksel Masaüstü Devleri (Adobe Acrobat Pro, Foxit vb.):** 1.5 GB ila 2.5 GB disk alanı kaplar, arka planda onlarca telemetri ve güncelleme servisi çalıştırır, 500 MB+ RAM tüketir ve aylık yüksek abonelik ücretleri talep eder.
 
-**PDFKit’in Varoluş Amacı:**  
+**PDFkit’in Varoluş Amacı:**  
 Belgeleri **asla bilgisayar dışına çıkarmadan**, tek bir bayt bile internete göndermeden, **3.5 MB'lık bir kurulum paketiyle** bir masaüstü bilgisayara saniyeler içinde kurulabilen; Adobe Acrobat kalitesinde düzenleme, filigran temizleme, fiziksel sansürleme ve Microsoft Office dönüşümü sağlayan sıfır maliyetli profesyonel bir araç sunmaktır.
 
 ---
@@ -30,9 +30,9 @@ Belgeleri **asla bilgisayar dışına çıkarmadan**, tek bir bayt bile internet
 
 ---
 
-### 1.3. Karşılaştırmalı Analiz (Neden PDFKit?)
+### 1.3. Karşılaştırmalı Analiz (Neden PDFkit?)
 
-| Karşılaştırma Kriteri | Adobe Acrobat Pro DC | LibreOffice Draw | Bulut Araçları (iLovePDF) | **PDFKit (Bu Proje)** |
+| Karşılaştırma Kriteri | Adobe Acrobat Pro DC | LibreOffice Draw | Bulut Araçları (iLovePDF) | **PDFkit (Bu Proje)** |
 | :--- | :--- | :--- | :--- | :--- |
 | **Fiyat & Model** | Yıllık ~3.500+ TL / Abonelik | Ücretsiz / Açık Kaynak | Aylık Kota / Ücretli Pro | **%100 Ücretsiz / Bağımsız** |
 | **İndirme / Kurulum Boyutu** | ~1.8 GB – 2.5 GB | ~350 MB – 600 MB | Kurulumsuz (Tarayıcı) | **3.45 MB (Installer)** |
@@ -52,7 +52,7 @@ Format atılmış, temel sürücüleri yüklenmiş ve internet erişimi olan sta
 1. **İşletim Sistemi:** Windows 10 (Build 19041+) veya Windows 11 (x64 / ARM64).
 2. **WebView2 Runtime:** Windows 11 ve güncel Windows 10 sürümlerinde Microsoft Edge WebView2 varsayılan olarak yüklüdür. Eğer çok eski bir LTSC sürümü kullanılıyorsa sistem otomatik olarak Microsoft WebView2 yükleyicisini talep eder (~120 MB tek seferlik sistem bileşeni).
 3. **Python Runtime (Ofis Dönüşümü İçin):**
-   - PDFKit'in temel PDF işlemleri (Düzenleme, Birleştirme, Ayırma, Döndürme, Filigran Kaldırma, İmza, Form Doldurma, Şifreleme, Yazdırma, Sansürleme) **harici hiçbir şey gerektirmez, tamamen Rust ile çalışır.**
+   - PDFkit'in temel PDF işlemleri (Düzenleme, Birleştirme, Ayırma, Döndürme, Filigran Kaldırma, İmza, Form Doldurma, Şifreleme, Yazdırma, Sansürleme) **harici hiçbir şey gerektirmez, tamamen Rust ile çalışır.**
    - Gelişmiş Word (DOCX) ve PowerPoint (PPTX) dönüştürücü motoru için sistemde standart bir Python 3.10+ ve ilgili paketlerin bulunması yeterlidir (`pdf2docx`, `pymupdf`, `python-pptx`, `python-docx`, `xlsxwriter`).
 4. **Disk Kaplama Alanı:**
    - Kurulum Paketi: **3.45 MB** (`PDFKit_0.1.0_x64-setup.exe`)
@@ -62,7 +62,7 @@ Format atılmış, temel sürücüleri yüklenmiş ve internet erişimi olan sta
 ---
 
 ### 2.2. Geliştirici Ortamı Kurulumu (Derleme Kılavuzu)
-Kaynak koddan PDFKit'i sıfırdan derlemek için:
+Kaynak koddan PDFkit'i sıfırdan derlemek için:
 ```bash
 # 1. Depoyu klonlayın
 git clone https://github.com/cagdass1128/PDFKit.git
@@ -92,7 +92,7 @@ npm run build:app
 
 ## 3. MODÜLER KOD VE SİSTEM MİMARİSİ (Architecture & Design)
 
-PDFKit, modern masaüstü yazılım dünyasının en sağlam mimarisi olan **Tauri v2 Katmanlı Mimarisi** üzerine inşa edilmiştir.
+PDFkit, modern masaüstü yazılım dünyasının en sağlam mimarisi olan **Tauri v2 Katmanlı Mimarisi** üzerine inşa edilmiştir.
 
 ### 3.1. Mimari Katman Şeması
 
@@ -244,7 +244,7 @@ Birçok akademik ve kurumsal PDF belgesinde (örneğin AÖF sınavları veya şi
 ### 5.2. Gerçek Bayt Seviyesinde Sansürleme (Physical Redaction)
 Geleneksel ve amatör PDF düzenleyiciler sansürleme yaparken metnin üzerine sadece siyah bir dikdörtgen çizer. Bu büyük bir güvenlik açığıdır; çünkü kullanıcı PDF'i açıp siyah kutunun altındaki metni fareyle seçip kopyalayabilir!
 
-* **PDFKit’in Yaklaşımı:**
+* **PDFkit’in Yaklaşımı:**
   1. Kullanıcı sansür kutusunu çizdiğinde koordinatları ($X, Y, W, H$) Rust backend'e gönderilir.
   2. `annotate.rs` ve `pdfutil.rs` dökümanın içerik akışındaki metin komutlarını gezer.
   3. Sansür kutusunun içine düşen harflerin glifleri (`Tj`, `TJ` dizgileri) bayt seviyesinde fiziksel olarak silinir veya boşluk karakteriyle değiştirilir.
@@ -256,7 +256,7 @@ Geleneksel ve amatör PDF düzenleyiciler sansürleme yaparken metnin üzerine s
 ### 5.3. 500x Hızlandırılmış Word (DOCX) Dönüştürme Motoru
 `python-docx` kütüphanesi standart kullanımda büyük bir performans tuzağına sahiptir:
 * **Hata / Darboğaz:** `table.cell(row, col)` fonksiyonu her çağrıldığında tablodaki tüm hücreleri ($M \times N$) baştan sona XML taramasıyla hesaplayan `_cells` özelliğini tetikler. 50 satırlık bir sınav tablosunun kenarlıkları çizilirken bu özellik 4.580 defa çağrılıyor ve 10 MİLYONDAN FAZLA XML araması yapılıyordu. Bu durum tek sayfayı 60 saniye boyunca donduruyordu.
-* **PDFKit İnovasyonu (`patch_docx_table_performance`):**
+* **PDFkit İnovasyonu (`patch_docx_table_performance`):**
   ```python
   def patch_docx_table_performance():
       from docx.table import Table
@@ -352,6 +352,6 @@ Kullanıcı PDF Düzenle ekranındayken tüm sayfalar tek bir dikey kaydırma ka
 
 ## 8. SONUÇ VE VİZYON
 
-PDFKit, "küçük boyutta devasa yetenek" felsefesiyle üretilmiş, gereksiz bağımlılıklardan arındırılmış, son derece hızlı ve güvenli bir masaüstü yazılımıdır. 
+PDFkit, "küçük boyutta devasa yetenek" felsefesiyle üretilmiş, gereksiz bağımlılıklardan arındırılmış, son derece hızlı ve güvenli bir masaüstü yazılımıdır. 
 
 Bu döküman, projenin mevcut tüm mimarisini, veri yollarını ve algoritmik temellerini eksiksiz olarak temsil etmektedir. İleride yapılacak tüm güncelleme, refactoring ve özellik ekleme süreçlerinde bu döküman ana başvuru kaynağı olarak kabul edilmelidir.

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📑 PDFKit
+# 📑 PDFkit
 ### Ultra-Hafif, Bağımsız, Sıfır-Ağ (Zero-Network) Masaüstü PDF İstasyonu
 
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/cagdass1128/PDFKit)
@@ -25,20 +25,20 @@
 
 ---
 
-## 💡 Neden PDFKit? (Problem & Çözüm)
+## 💡 Neden PDFkit? (Problem & Çözüm)
 
 Modern bilgi çalışanları, IT departmanları ve kurumlar belge akışında iki tehlikeli çıkmazın arasına sıkışmıştır:
 
 1. **Bulut Tabanlı Çeviriciler (iLovePDF, Smallpdf vb.):** Belgeleri üçüncü taraf sunuculara yükler. Kişisel veriler, ticari sırlar veya sözleşmeler internete çıkar; **KVKK ve GDPR açısından ciddi bir güvenlik açığı** oluşturur.
 2. **Geleneksel Masaüstü Devleri (Adobe Acrobat vb.):** 2 GB+ disk alanı kaplar, arka planda onlarca telemetri ve güncelleme servisi çalıştırır, yüzlerce MB RAM tüketir ve kullanıcı başına yıllık yüksek abonelik ücretleri talep eder.
 
-**PDFKit**, belgeleri **asla bilgisayar dışına çıkarmadan**, tek bir bayt bile internete göndermeden, **3.5 MB'lık** bir kurulum paketiyle çalışan; kurumsal düzeyde düzenleme, filigran temizleme, fiziksel sansürleme ve Office dönüşümü sağlayan **%100 yerel ve ücretsiz** bir çözümdür.
+**PDFkit**, belgeleri **asla bilgisayar dışına çıkarmadan**, tek bir bayt bile internete göndermeden, **3.5 MB'lık** bir kurulum paketiyle çalışan; kurumsal düzeyde düzenleme, filigran temizleme, fiziksel sansürleme ve Office dönüşümü sağlayan **%100 yerel ve ücretsiz** bir çözümdür.
 
 ---
 
 ## ⚡ Karşılaştırma Tablosu
 
-| Kriter | Adobe Acrobat Pro DC | Bulut Araçları (iLovePDF vb.) | 📑 PDFKit (Bu Proje) |
+| Kriter | Adobe Acrobat Pro DC | Bulut Araçları (iLovePDF vb.) | 📑 PDFkit (Bu Proje) |
 | :--- | :---: | :---: | :---: |
 | **Maliyet** | ~Yıllık Binlerce TL | Kotalı / Aylık Ücret | **%100 Ücretsiz & Bağımsız** |
 | **Kurulum Boyutu** | ~1.8 GB – 2.5 GB | Kurulumsuz (Tarayıcı) | **⚡ 3.45 MB (Installer)** |
@@ -56,7 +56,7 @@ Modern bilgi çalışanları, IT departmanları ve kurumlar belge akışında ik
 Uygulama `tauri.conf.json` üzerinde katı bir **İçerik Güvenlik Politikası (CSP)** ile yapılandırılmıştır. Ağ bağlantıları çekirdek seviyesinde kilitlidir. Açtığınız, düzenlediğiniz veya dönüştürdüğünüz hiçbir dosya bilgisayarınızın dışına çıkamaz.
 
 ### 🪓 2. Fiziksel Sansürleme (True Byte Redaction)
-Amatör araçlar metnin üstünü sadece siyah bir kutuyla boyar (metin altta seçilebilir ve kopyalanabilir kalır). **PDFKit**, seçilen koordinatlardaki glifleri (`Tj`, `TJ`) doğrudan PDF'in içerik akışından ve bayt diziliminden **fiziksel olarak kazır**. Sansürlenen veri geri döndürülemez.
+Amatör araçlar metnin üstünü sadece siyah bir kutuyla boyar (metin altta seçilebilir ve kopyalanabilir kalır). **PDFkit**, seçilen koordinatlardaki glifleri (`Tj`, `TJ`) doğrudan PDF'in içerik akışından ve bayt diziliminden **fiziksel olarak kazır**. Sansürlenen veri geri döndürülemez.
 
 ### 🎯 3. Akıllı Vektörel Filigran Temizleme
 Akademik notlarda, sınav sorularında veya taslak sözleşmelerde bulunan çapraz ve şeffaf filigranları sayfa katmanlarından analiz ederek tek tıkla temizler. Üst, alt veya gövde bölgesi bazında seçici temizleme imkanı sunar.
@@ -73,7 +73,7 @@ PDF'ten Word (DOCX) ve Sunum (PPTX) dönüşümlerinde, özel geliştirilen `pat
 
 ## 🏢 Kurumsal IT & Sistem Yöneticileri İçin Dağıtım (Enterprise Deployment)
 
-PDFKit, kurumsal Windows ortamlarında (Active Directory, Microsoft Intune, SCCM veya PDQ Deploy) merkezi olarak dağıtılabilmesi için resmi `.msi` paketi ile paketlenmiştir.
+PDFkit, kurumsal Windows ortamlarında (Active Directory, Microsoft Intune, SCCM veya PDQ Deploy) merkezi olarak dağıtılabilmesi için resmi `.msi` paketi ile paketlenmiştir.
 
 ### Sessiz Kurulum (Silent Install - PowerShell / CMD):
 ```powershell
@@ -99,7 +99,7 @@ Daha derin teknik ve algoritmik detaylar için [DOCUMENTATION.md](DOCUMENTATION.
 
 ## 🔒 Güvenlik & Windows SmartScreen Bildirimi
 
-> **Not:** PDFKit tamamen bağımsız ve açık kaynaklı bir topluluk girişimidir. Yıllık binlerce dolarlık ticari kod imzalama (EV Code Signing) sertifikasına sahip olmadığı için, Windows SmartScreen ilk çalıştırmada *"Bilinmeyen Yayıncı"* uyarısı verebilir.
+> **Not:** PDFkit tamamen bağımsız ve açık kaynaklı bir topluluk girişimidir. Yıllık binlerce dolarlık ticari kod imzalama (EV Code Signing) sertifikasına sahip olmadığı için, Windows SmartScreen ilk çalıştırmada *"Bilinmeyen Yayıncı"* uyarısı verebilir.
 > 
 > Uygulama tamamen güvenlidir ve sıfır telemetri içerir. Kurulum ekranında **"Ek Bilgi" (More Info) -> "Yine de Çalıştır" (Run Anyway)** seçeneğiyle güvenle başlatabilirsiniz.
 
