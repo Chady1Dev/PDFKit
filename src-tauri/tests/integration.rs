@@ -617,6 +617,62 @@ fn write_and_stamp_binary() {
 }
 
 #[test]
+fn form_fields_detection_and_filling() {
+    let sample_path = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\interactiveform_enabled.pdf");
+    if !sample_path.exists() {
+        return;
+    }
+    let fields = run(commands::forms::list_form_fields(
+        sample_path.to_string_lossy().into_owned(),
+    ))
+    .unwrap();
+    assert!(!fields.is_empty());
+
+    let hs_diploma = fields.iter().find(|f| f.name == "HIGH SCHOOL DIPLOMA").unwrap();
+    assert_eq!(hs_diploma.field_type, "checkbox");
+    assert_eq!(hs_diploma.export_value.as_deref(), Some("On"));
+
+    let sex_field = fields.iter().find(|f| f.name == "Sex").unwrap();
+    assert_eq!(sex_field.field_type, "radio");
+    assert!(sex_field.options.contains(&"MALE".to_string()));
+    assert!(sex_field.options.contains(&"FEMALE".to_string()));
+
+    let first_name = fields.iter().find(|f| f.name == "Name_First").unwrap();
+    assert_eq!(first_name.field_type, "text");
+
+    let print_btn = fields.iter().find(|f| f.name == "Print").unwrap();
+    assert_eq!(print_btn.field_type, "pushbutton");
+
+    let ws = workspace("fill_form_test");
+    let out = ws.join("filled_test.pdf");
+    let mut fill_vals = std::collections::HashMap::new();
+    fill_vals.insert("HIGH SCHOOL DIPLOMA".to_string(), "true".to_string());
+    fill_vals.insert("Sex".to_string(), "MALE".to_string());
+    fill_vals.insert("Name_First".to_string(), "Ahmet".to_string());
+
+    let res = run(commands::forms::fill_form(
+        sample_path.to_string_lossy().into_owned(),
+        out.to_string_lossy().into_owned(),
+        fill_vals,
+    ))
+    .unwrap();
+    assert_eq!(res.total_pages, 1);
+    assert!(out.exists());
+
+    // Verify written PDF fields
+    let re_read = run(commands::forms::list_form_fields(
+        out.to_string_lossy().into_owned(),
+    ))
+    .unwrap();
+    let filled_hs = re_read.iter().find(|f| f.name == "HIGH SCHOOL DIPLOMA").unwrap();
+    assert_eq!(filled_hs.value, "On");
+    let filled_sex = re_read.iter().find(|f| f.name == "Sex").unwrap();
+    assert_eq!(filled_sex.value, "MALE");
+    let filled_first = re_read.iter().find(|f| f.name == "Name_First").unwrap();
+    assert_eq!(filled_first.value, "Ahmet");
+}
+
+#[test]
 fn stamp_page_overlays() {
     let ws = workspace("overlays");
     let src = ws.join("src.pdf");

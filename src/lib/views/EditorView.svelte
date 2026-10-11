@@ -4280,13 +4280,34 @@
                             type="checkbox"
                             class="absolute pointer-events-auto cursor-pointer rounded text-indigo-600 focus:ring-indigo-500 border-zinc-400"
                             style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
-                            checked={docFormValues[field.name] === "Yes" || (!docFormValues[field.name] && field.value === "Yes")}
+                            checked={docFormValues[field.name] === "Yes" || docFormValues[field.name] === "On" || (!docFormValues[field.name] && (field.value === "Yes" || field.value === "On"))}
                             disabled={field.readOnly}
                             on:change={(e) => {
-                              docFormValues[field.name] = e.currentTarget.checked ? "Yes" : "Off";
+                              docFormValues[field.name] = e.currentTarget.checked ? (field.buttonValue || "On") : "Off";
                               if (activeDoc) markDocumentModified(activeDoc.id);
                             }}
                           />
+                        {:else if field.type === "radio"}
+                          <input
+                            type="radio"
+                            name={field.name}
+                            class="absolute pointer-events-auto cursor-pointer rounded-full text-indigo-600 focus:ring-indigo-500 border-zinc-400"
+                            style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
+                            checked={docFormValues[field.name] === field.buttonValue || (!docFormValues[field.name] && field.value === field.buttonValue)}
+                            disabled={field.readOnly}
+                            on:change={() => {
+                              docFormValues[field.name] = field.buttonValue || "On";
+                              if (activeDoc) markDocumentModified(activeDoc.id);
+                            }}
+                          />
+                        {:else if field.type === "pushbutton"}
+                          <button
+                            type="button"
+                            class="absolute pointer-events-auto rounded bg-zinc-200/60 hover:bg-zinc-300 text-[10px] text-zinc-700 font-semibold border border-zinc-400/60 shadow-xs flex items-center justify-center cursor-default"
+                            style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
+                          >
+                            {field.name}
+                          </button>
                         {:else}
                           <input
                             type="text"

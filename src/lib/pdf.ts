@@ -21,9 +21,10 @@ export interface PdfLink {
 export interface PdfFormField {
   id: string;
   name: string;
-  type: "text" | "checkbox" | "choice";
+  type: "text" | "checkbox" | "radio" | "choice" | "pushbutton";
   rect: [number, number, number, number];
   value: string;
+  buttonValue?: string;
   readOnly?: boolean;
 }
 
@@ -150,9 +151,15 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
           const x2 = Math.max(viewRect[0], viewRect[2]);
           const y2 = Math.max(viewRect[1], viewRect[3]);
 
-          let fieldType: "text" | "checkbox" | "choice" = "text";
+          let fieldType: "text" | "checkbox" | "radio" | "choice" | "pushbutton" = "text";
           if (ann.fieldType === "Btn") {
-            fieldType = "checkbox";
+            if (ann.radioButton) {
+              fieldType = "radio";
+            } else if (ann.pushbutton || (!ann.checkBox && !ann.radioButton && ann.fieldValue === null && !ann.buttonValue)) {
+              fieldType = "pushbutton";
+            } else {
+              fieldType = "checkbox";
+            }
           } else if (ann.fieldType === "Ch") {
             fieldType = "choice";
           }
@@ -163,6 +170,7 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
             type: fieldType,
             rect: [x1, y1, x2, y2],
             value: typeof ann.fieldValue === "string" ? ann.fieldValue : (ann.fieldValue ? String(ann.fieldValue) : ""),
+            buttonValue: ann.buttonValue ? String(ann.buttonValue) : undefined,
             readOnly: Boolean(ann.readOnly),
           });
         }

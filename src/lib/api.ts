@@ -29,6 +29,9 @@ export interface FormField {
   name: string;
   field_type: string;
   value: string;
+  options?: string[];
+  read_only?: boolean;
+  export_value?: string | null;
 }
 
 /** Mirrors `PageRange` in src-tauri/src/commands/split.rs */
