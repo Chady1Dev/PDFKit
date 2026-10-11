@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
   import {
     ChevronLeft,
     ChevronRight,
@@ -27,6 +27,7 @@
     | ((pos: { x: number; y: number; width: number; height: number; page: number }) => void)
     | undefined = undefined;
   export let onFieldClick: ((fieldName: string) => void) | undefined = undefined;
+  export let onFieldValueChange: ((fieldName: string, value: string) => void) | undefined = undefined;
   export let formValues: Record<string, string> = {};
 
   let canvasContainer: HTMLDivElement | null = null;
@@ -41,11 +42,14 @@
   let isDraggingSig = false;
   let dragOffset = { x: 0, y: 0 };
 
+  $: pagePixelWidth = Math.round(pageDims.width * scale);
+  $: pagePixelHeight = Math.round(pageDims.height * scale);
+
   $: if (doc && currentPage) {
     loadPage();
   }
 
-  $: if (scale && doc && currentPage) {
+  $: if (scale && doc && currentPage && canvas) {
     renderCanvas();
   }
 
@@ -136,6 +140,62 @@
   function resetZoom() {
     computeAutoFit();
     scale = Math.max(0.4, Math.round(autoFitScale * 100) / 100);
+  }
+
+  // --- Checkbox & Radio State Handlers ---
+  function isFieldChecked(name: string, defaultExportVal: string = "On"): boolean {
+    const val = formValues[name];
+    if (val === undefined) {
+      const initial = (pageFields.find((f) => f.name === name)?.value || "").trim();
+      return (
+        initial === "On" ||
+        initial === "Yes" ||
+        initial === "1" ||
+        initial === "true" ||
+        initial === defaultExportVal
+      );
+    }
+    const norm = (val || "").trim().toLowerCase();
+    if (norm === "off" || norm === "false" || norm === "0" || norm === "" || norm === "/") {
+      return false;
+    }
+    return true;
+  }
+
+  function toggleCheckboxField(f: PdfFormField) {
+    const checked = isFieldChecked(f.name, f.buttonValue || "On");
+    const onVal = f.buttonValue || "On";
+    const newVal = checked ? "Off" : onVal;
+    formValues[f.name] = newVal;
+    formValues = { ...formValues };
+
+    if (onFieldValueChange) {
+      onFieldValueChange(f.name, newVal);
+    }
+    if (onFieldClick) {
+      onFieldClick(f.name);
+    }
+  }
+
+  function isRadioActive(f: PdfFormField): boolean {
+    const current = (formValues[f.name] !== undefined ? formValues[f.name] : f.value || "")
+      .trim()
+      .toLowerCase();
+    const btnVal = (f.buttonValue || "").trim().toLowerCase();
+    return Boolean(btnVal && current === btnVal);
+  }
+
+  function selectRadioField(f: PdfFormField) {
+    const newVal = f.buttonValue || "On";
+    formValues[f.name] = newVal;
+    formValues = { ...formValues };
+
+    if (onFieldValueChange) {
+      onFieldValueChange(f.name, newVal);
+    }
+    if (onFieldClick) {
+      onFieldClick(f.name);
+    }
   }
 
   // --- Signature Box Math ---
@@ -309,34 +369,138 @@
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
       <div
         class="relative shadow-md rounded-lg overflow-hidden bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 transition-all select-none"
-        style="width: {canvas ? canvas.width : Math.round(pageDims.width * scale)}px; height: {canvas ? canvas.height : Math.round(pageDims.height * scale)}px;"
+        style="width: {pagePixelWidth}px; height: {pagePixelHeight}px;"
         on:click={handleCanvasClick}
       >
-        <canvas bind:this={canvas} class="block"></canvas>
+        <canvas
+          bind:this={canvas}
+          class="block"
+          style="width: {pagePixelWidth}px; height: {pagePixelHeight}px;"
+        ></canvas>
 
         {#if loading}
-          <div class="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-xs dark:bg-zinc-900/50">
+          <div class="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-xs dark:bg-zinc-900/50 z-30">
             <span class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 animate-pulse">Sayfa Yükleniyor...</span>
           </div>
         {/if}
 
-        <!-- Interactive Form Fields Overlay -->
+        <!-- Interactive Form Fields Overlay: Scaled linearly via rectPt -->
         {#if mode === "forms" && pageFields.length > 0}
-          <div class="absolute inset-0 pointer-events-none">
+          <div class="absolute inset-0 pointer-events-none z-10">
             {#each pageFields as f}
-              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-              <div
-                class="absolute pointer-events-auto cursor-pointer rounded transition-all flex items-center justify-center text-[10px] {highlightFieldName === f.name ? 'ring-2 ring-indigo-500 bg-indigo-500/25 border-indigo-600' : 'border border-blue-400/40 bg-blue-500/10 hover:bg-blue-500/20'}"
-                style="left: {f.rect[0]}px; top: {f.rect[1]}px; width: {f.rect[2] - f.rect[0]}px; height: {f.rect[3] - f.rect[1]}px;"
-                title="{f.name} ({f.type})"
-                on:click={() => onFieldClick?.(f.name)}
-              >
-                {#if f.type === "checkbox"}
-                  {#if formValues[f.name] === "Yes" || formValues[f.name] === "On" || (!formValues[f.name] && (f.value === "Yes" || f.value === "On"))}
-                    <Check size={Math.min(14, (f.rect[3] - f.rect[1]) * 0.9)} class="text-indigo-600 dark:text-indigo-400 stroke-[3]" />
+              {#if f.type === "checkbox"}
+                <!-- Checkbox: Live, Clickable with Tick Mark -->
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div
+                  class="absolute pointer-events-auto cursor-pointer rounded transition-all flex items-center justify-center {isFieldChecked(f.name, f.buttonValue || 'On') ? 'bg-emerald-500/25 border-2 border-emerald-600 shadow-2xs' : 'bg-white/50 hover:bg-white/80 border border-zinc-400 hover:border-indigo-600'} {highlightFieldName === f.name ? 'ring-2 ring-indigo-500 scale-105' : ''}"
+                  style="
+                    left: {f.rectPt[0] * scale}px;
+                    top: {f.rectPt[1] * scale}px;
+                    width: {Math.max(14, (f.rectPt[2] - f.rectPt[0]) * scale)}px;
+                    height: {Math.max(14, (f.rectPt[3] - f.rectPt[1]) * scale)}px;
+                  "
+                  title="{f.name}: {isFieldChecked(f.name, f.buttonValue || 'On') ? 'İşaretli (Kaldırmak için tıkla)' : 'İşaretsiz (İşaretlemek için tıkla)'}"
+                  on:click={(e) => {
+                    e.stopPropagation();
+                    toggleCheckboxField(f);
+                  }}
+                >
+                  {#if isFieldChecked(f.name, f.buttonValue || 'On')}
+                    <Check
+                      size={Math.max(11, (f.rectPt[3] - f.rectPt[1]) * scale * 1.15)}
+                      class="text-emerald-700 dark:text-emerald-300 stroke-[3.5] drop-shadow-2xs"
+                    />
                   {/if}
-                {/if}
-              </div>
+                </div>
+              {:else if f.type === "radio"}
+                <!-- Radio Option: Live, Clickable with Active Dot -->
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div
+                  class="absolute pointer-events-auto cursor-pointer rounded-full transition-all flex items-center justify-center {isRadioActive(f) ? 'bg-purple-500/25 border-2 border-purple-600 shadow-2xs' : 'bg-white/50 hover:bg-white/80 border border-zinc-400 hover:border-purple-600'} {highlightFieldName === f.name ? 'ring-2 ring-purple-500 scale-105' : ''}"
+                  style="
+                    left: {f.rectPt[0] * scale}px;
+                    top: {f.rectPt[1] * scale}px;
+                    width: {Math.max(14, (f.rectPt[2] - f.rectPt[0]) * scale)}px;
+                    height: {Math.max(14, (f.rectPt[3] - f.rectPt[1]) * scale)}px;
+                  "
+                  title="{f.name} ({f.buttonValue || 'Seçenek'})"
+                  on:click={(e) => {
+                    e.stopPropagation();
+                    selectRadioField(f);
+                  }}
+                >
+                  {#if isRadioActive(f)}
+                    <div
+                      class="rounded-full bg-purple-700 dark:bg-purple-300 drop-shadow-2xs"
+                      style="
+                        width: {Math.max(6, (f.rectPt[2] - f.rectPt[0]) * scale * 0.55)}px;
+                        height: {Math.max(6, (f.rectPt[3] - f.rectPt[1]) * scale * 0.55)}px;
+                      "
+                    ></div>
+                  {/if}
+                </div>
+              {:else if f.type === "text" || f.type === "multiline"}
+                <!-- Text Field: Live, Editable and Bi-directionally Synced -->
+                <input
+                  type="text"
+                  class="absolute pointer-events-auto rounded bg-blue-50/45 hover:bg-white/95 focus:bg-white px-1 text-zinc-900 border transition-all {highlightFieldName === f.name ? 'border-indigo-600 ring-2 ring-indigo-500/40 bg-white font-medium' : 'border-blue-400/40 hover:border-indigo-400 focus:border-indigo-600'} focus:outline-none shadow-2xs"
+                  style="
+                    left: {f.rectPt[0] * scale}px;
+                    top: {f.rectPt[1] * scale}px;
+                    width: {(f.rectPt[2] - f.rectPt[0]) * scale}px;
+                    height: {(f.rectPt[3] - f.rectPt[1]) * scale}px;
+                    font-size: {Math.max(8, Math.min(18, (f.rectPt[3] - f.rectPt[1]) * scale * 0.72))}px;
+                    line-height: 1;
+                  "
+                  value={formValues[f.name] !== undefined ? formValues[f.name] : f.value}
+                  placeholder={f.name}
+                  disabled={f.readOnly}
+                  on:focus={() => onFieldClick?.(f.name)}
+                  on:input={(e) => {
+                    const val = e.currentTarget.value;
+                    formValues[f.name] = val;
+                    onFieldValueChange?.(f.name, val);
+                  }}
+                />
+              {:else if f.type === "choice" && f.options && f.options.length > 0}
+                <!-- Dropdown / Combo Choice -->
+                <select
+                  class="absolute pointer-events-auto rounded bg-blue-50/60 hover:bg-white text-zinc-900 border border-blue-400/50 focus:border-indigo-600 text-xs px-1"
+                  style="
+                    left: {f.rectPt[0] * scale}px;
+                    top: {f.rectPt[1] * scale}px;
+                    width: {(f.rectPt[2] - f.rectPt[0]) * scale}px;
+                    height: {(f.rectPt[3] - f.rectPt[1]) * scale}px;
+                    font-size: {Math.max(8, Math.min(14, (f.rectPt[3] - f.rectPt[1]) * scale * 0.7))}px;
+                  "
+                  value={formValues[f.name] !== undefined ? formValues[f.name] : f.value}
+                  disabled={f.readOnly}
+                  on:focus={() => onFieldClick?.(f.name)}
+                  on:change={(e) => {
+                    const val = e.currentTarget.value;
+                    formValues[f.name] = val;
+                    onFieldValueChange?.(f.name, val);
+                  }}
+                >
+                  <option value="">--</option>
+                  {#each f.options as opt}
+                    <option value={opt}>{opt}</option>
+                  {/each}
+                </select>
+              {:else if f.type === "pushbutton"}
+                <!-- Pushbutton -->
+                <div
+                  class="absolute pointer-events-auto rounded bg-zinc-200/40 border border-zinc-400/50 text-[10px] text-zinc-600 font-semibold flex items-center justify-center select-none"
+                  style="
+                    left: {f.rectPt[0] * scale}px;
+                    top: {f.rectPt[1] * scale}px;
+                    width: {(f.rectPt[2] - f.rectPt[0]) * scale}px;
+                    height: {(f.rectPt[3] - f.rectPt[1]) * scale}px;
+                  "
+                >
+                  {f.name}
+                </div>
+              {/if}
             {/each}
           </div>
         {/if}

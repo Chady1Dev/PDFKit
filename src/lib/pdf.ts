@@ -23,8 +23,10 @@ export interface PdfFormField {
   name: string;
   type: "text" | "checkbox" | "radio" | "choice" | "pushbutton";
   rect: [number, number, number, number];
+  rectPt: [number, number, number, number];
   value: string;
   buttonValue?: string;
+  options?: string[];
   readOnly?: boolean;
 }
 
@@ -140,6 +142,7 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
       if (destroyed) throw new Error("document closed");
       const pdfPage = await doc.getPage(page);
       const viewport = pdfPage.getViewport({ scale });
+      const viewport1 = pdfPage.getViewport({ scale: 1.0 });
       const annotations = await pdfPage.getAnnotations();
       const fields: PdfFormField[] = [];
 
@@ -150,6 +153,12 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
           const y1 = Math.min(viewRect[1], viewRect[3]);
           const x2 = Math.max(viewRect[0], viewRect[2]);
           const y2 = Math.max(viewRect[1], viewRect[3]);
+
+          const viewRect1 = viewport1.convertToViewportRectangle(ann.rect);
+          const x1_pt = Math.min(viewRect1[0], viewRect1[2]);
+          const y1_pt = Math.min(viewRect1[1], viewRect1[3]);
+          const x2_pt = Math.max(viewRect1[0], viewRect1[2]);
+          const y2_pt = Math.max(viewRect1[1], viewRect1[3]);
 
           let fieldType: "text" | "checkbox" | "radio" | "choice" | "pushbutton" = "text";
           if (ann.fieldType === "Btn") {
@@ -164,13 +173,22 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
             fieldType = "choice";
           }
 
+          let optList: string[] | undefined = undefined;
+          if (ann.options && Array.isArray(ann.options)) {
+            optList = ann.options.map((o: any) =>
+              typeof o === "string" ? o : (o.displayValue || o.exportValue || String(o))
+            );
+          }
+
           fields.push({
             id: ann.id || ann.fieldName,
             name: ann.fieldName,
             type: fieldType,
             rect: [x1, y1, x2, y2],
+            rectPt: [x1_pt, y1_pt, x2_pt, y2_pt],
             value: typeof ann.fieldValue === "string" ? ann.fieldValue : (ann.fieldValue ? String(ann.fieldValue) : ""),
             buttonValue: ann.buttonValue ? String(ann.buttonValue) : undefined,
+            options: optList,
             readOnly: Boolean(ann.readOnly),
           });
         }

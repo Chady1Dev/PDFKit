@@ -134,15 +134,20 @@
   function isCheckboxChecked(f: FormField): boolean {
     const val = fieldValues[f.name];
     if (val === undefined) {
-      return f.value === "On" || f.value === "Yes" || (f.export_value && f.value === f.export_value);
+      const initial = (f.value || "").trim();
+      return (
+        initial === "On" ||
+        initial === "Yes" ||
+        initial === "1" ||
+        initial === "true" ||
+        (f.export_value !== null && f.export_value !== undefined && initial === f.export_value)
+      );
     }
-    return (
-      val === "true" ||
-      val === "1" ||
-      val === "Yes" ||
-      val === "On" ||
-      (f.export_value !== null && f.export_value !== undefined && val === f.export_value)
-    );
+    const norm = (val || "").trim().toLowerCase();
+    if (norm === "off" || norm === "false" || norm === "0" || norm === "" || norm === "/") {
+      return false;
+    }
+    return true;
   }
 
   function toggleCheckbox(f: FormField) {
@@ -357,7 +362,11 @@
           {sigW}
           {sigH}
           sigImage={sigPreviewUrl || sigImagePath}
-          formValues={fieldValues}
+          bind:formValues={fieldValues}
+          onFieldValueChange={(fieldName, val) => {
+            fieldValues[fieldName] = val;
+            fieldValues = { ...fieldValues };
+          }}
           onSigChange={(pos) => {
             sigX = pos.x;
             sigY = pos.y;
