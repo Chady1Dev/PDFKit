@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Ultra-lightweight local-first PDF toolbox"
 edition = "2021"
 rust-version = "1.77"
+license = "MIT"
+authors = ["Çağdaş Polat <cagdas1128@gmail.com>"]
+repository = "https://github.com/cagdass1128/PDFKit"
 
 [lib]
 name = "pdfkit_lib"

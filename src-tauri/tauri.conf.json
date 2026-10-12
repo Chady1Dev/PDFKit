@@ -27,8 +27,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "icon": ["icons/icon.ico", "icons/icon.png"],
+    "copyright": "Copyright © 2026 Çağdaş Polat (github.com/cagdass1128) - MIT License",
+    "publisher": "Çağdaş Polat",
+    "homepage": "https://github.com/cagdass1128/PDFKit",
+    "shortDescription": "Ultra-lightweight local-first PDF toolbox (MIT License)",
     "resources": [
       "scripts/*"
     ],

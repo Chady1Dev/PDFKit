@@ -125,10 +125,12 @@ npm run build:app
 ---
 
 ## 📄 Lisans
-Bu proje **[GNU General Public License v3.0 (GPL-3.0)](LICENSE)** ile lisanslanmıştır. 
+Bu proje **[MIT Lisansı](LICENSE)** ile lisanslanmıştır.
 
-* Bireysel ve kurumsal ortamlarda tamamen **ücretsiz ve sınırsız** olarak kullanılabilir.
-* Kodun özgürlüğünü korur; açık kaynak standartlarına tam uyumludur. Detaylar için [LICENSE](LICENSE) dosyasına göz atabilirsiniz.
+Copyright (c) 2026 Çağdaş Polat ([github.com/cagdass1128](https://github.com/cagdass1128))
+
+* Bireysel ve kurumsal ortamlarda tamamen **ücretsiz, sınırsız ve açık** olarak kullanılabilir, değiştirilebilir ve dağıtılabilir.
+* Detaylar için [LICENSE](LICENSE) dosyasına göz atabilirsiniz.
 
 ---
 

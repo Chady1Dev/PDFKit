@@ -2,6 +2,8 @@
   "name": "pdfkit",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
+  "author": "Çağdaş Polat <cagdas1128@gmail.com>",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -9,7 +9,7 @@
   import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import {
     LayoutGrid, FilePlus2, Scissors, RotateCw, Layers, FileArchive,
-    Image, Lock, Stamp, Sun, Moon, PenLine, History,
+    Image, Lock, Stamp, Sun, Moon, PenLine, History, Info,
   } from "@lucide/svelte";
   import Toast from "./lib/components/Toast.svelte";
   import Dashboard from "./lib/views/Dashboard.svelte";
@@ -230,12 +230,29 @@
       {/each}
     </div>
 
-    <button
-      class="m-3 flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
-      on:click={theme.toggle}
-    >
-      {#if $theme === "dark"}<Sun size={15} /> Açık Mod{:else}<Moon size={15} /> Koyu Mod{/if}
-    </button>
+    <div class="m-3 flex items-center gap-1.5">
+      <button
+        class="flex flex-1 items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+        on:click={theme.toggle}
+      >
+        {#if $theme === "dark"}<Sun size={15} /> Açık Mod{:else}<Moon size={15} /> Koyu Mod{/if}
+      </button>
+
+      <div class="relative group">
+        <button
+          type="button"
+          class="flex h-[38px] w-[38px] items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
+          aria-label="Telif Hakkı & Bilgi"
+        >
+          <Info size={15} />
+        </button>
+
+        <div class="pointer-events-none absolute bottom-full right-0 mb-2 hidden w-max rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-100 shadow-xl ring-1 ring-zinc-700/60 group-hover:flex items-center gap-1 z-50 dark:bg-zinc-800 dark:text-zinc-200">
+          <span>Copyright (c) 2026 github.com/cagdass1128</span>
+          <div class="absolute -bottom-1 right-3.5 h-2 w-2 rotate-45 bg-zinc-900 dark:bg-zinc-800"></div>
+        </div>
+      </div>
+    </div>
   </nav>
 
   <main class="flex min-w-0 flex-1 flex-col overflow-hidden {$currentView === 'editor' ? 'p-0' : 'overflow-y-auto p-6'}">
