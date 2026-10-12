@@ -648,7 +648,7 @@ fn form_fields_detection_and_filling() {
     let mut fill_vals = std::collections::HashMap::new();
     fill_vals.insert("HIGH SCHOOL DIPLOMA".to_string(), "true".to_string());
     fill_vals.insert("Sex".to_string(), "MALE".to_string());
-    fill_vals.insert("Name_First".to_string(), "Ahmet".to_string());
+    fill_vals.insert("Name_First".to_string(), "Çağdaş MİMAR Şükrü".to_string());
 
     let res = run(commands::forms::fill_form(
         sample_path.to_string_lossy().into_owned(),
@@ -669,7 +669,115 @@ fn form_fields_detection_and_filling() {
     let filled_sex = re_read.iter().find(|f| f.name == "Sex").unwrap();
     assert_eq!(filled_sex.value, "MALE");
     let filled_first = re_read.iter().find(|f| f.name == "Name_First").unwrap();
-    assert_eq!(filled_first.value, "Ahmet");
+    assert_eq!(filled_first.value, "Çağdaş MİMAR Şükrü");
+}
+
+#[test]
+fn test_turkish_acroform_encoding() {
+    let p1 = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\interactiveform_enabled.pdf");
+    let p2 = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\pdfKit.pdf");
+    let sample_path = if p1.exists() {
+        p1
+    } else if p2.exists() {
+        p2
+    } else {
+        return;
+    };
+    let ws = workspace("turkish_acroform");
+    let out = ws.join("turkish_filled.pdf");
+    let mut fill_vals = std::collections::HashMap::new();
+    fill_vals.insert("Name_Last".to_string(), "SÖĞÇÜŞİsöğçüşSOGCUS".to_string());
+    fill_vals.insert("Name_First".to_string(), "YANiSÖĞÇÜŞİsöğçüşSOGCUS".to_string());
+    fill_vals.insert("Name_Middle".to_string(), "heySÖĞÇÜŞİsöğçüşSOGCUS".to_string());
+    fill_vals.insert("Address_1".to_string(), "SÖĞÇÜŞİsöğçüşSOGCUS".to_string());
+    fill_vals.insert("Address_2".to_string(), "SÖĞÇÜŞİsöğçüşSOGCUS".to_string());
+    fill_vals.insert("City".to_string(), "SÖĞÇÜŞİsöğçüşSOGCUS".to_string());
+    fill_vals.insert("Emergency_Contact".to_string(), "SÖĞÇÜŞİssSOGCUS".to_string());
+
+    let res = run(commands::forms::fill_form(
+        sample_path.to_string_lossy().into_owned(),
+        out.to_string_lossy().into_owned(),
+        fill_vals.clone(),
+    ))
+    .unwrap();
+    assert_eq!(res.total_pages, 1);
+    assert!(out.exists());
+
+    // Also write to pdfKit_updated.pdf on desktop for direct inspection and comparison
+    let updated_desktop = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\pdfKit_updated.pdf");
+    let _ = run(commands::forms::fill_form(
+        sample_path.to_string_lossy().into_owned(),
+        updated_desktop.to_string_lossy().into_owned(),
+        fill_vals,
+    ));
+
+    let re_read = run(commands::forms::list_form_fields(
+        out.to_string_lossy().into_owned(),
+    ))
+    .unwrap();
+    let last = re_read.iter().find(|f| f.name == "Name_Last").unwrap();
+    assert_eq!(last.value, "SÖĞÇÜŞİsöğçüşSOGCUS");
+    let mid = re_read.iter().find(|f| f.name == "Name_Middle").unwrap();
+    assert_eq!(mid.value, "heySÖĞÇÜŞİsöğçüşSOGCUS");
+    let addr = re_read.iter().find(|f| f.name == "Address_1").unwrap();
+    assert_eq!(addr.value, "SÖĞÇÜŞİsöğçüşSOGCUS");
+
+    // Verify DR and NeedAppearances are configured in output PDF
+    let doc = Document::load(&out).unwrap();
+    let catalog = doc.catalog().unwrap();
+    let acro_obj = catalog.get(b"AcroForm").unwrap();
+    let (_, acro_dict) = doc.dereference(acro_obj).unwrap();
+    let acro = acro_dict.as_dict().unwrap();
+    assert_eq!(acro.get(b"NeedAppearances").unwrap().as_bool().unwrap(), false);
+    assert!(acro.get(b"DR").is_ok());
+
+    // Verify /DR /Font is Type 1 (NOT Type 0) so Adobe Acrobat interactive editor doesn't scramble text
+    let dr_obj = acro.get(b"DR").unwrap();
+    let (_, dr_dict_res) = doc.dereference(dr_obj).unwrap();
+    let dr_dict = dr_dict_res.as_dict().unwrap();
+    let dr_font_obj = dr_dict.get(b"Font").unwrap();
+    let (_, dr_font_res) = doc.dereference(dr_font_obj).unwrap();
+    let dr_fonts = dr_font_res.as_dict().unwrap();
+    let helv_ref = dr_fonts.get(b"Helv").unwrap();
+    let (_, helv_dict_res) = doc.dereference(helv_ref).unwrap();
+    let helv_dict = helv_dict_res.as_dict().unwrap();
+    assert_eq!(
+        helv_dict.get(b"Subtype").unwrap().as_name().unwrap(),
+        b"Type1",
+        "/DR /Font /Helv MUST be Type 1 for Adobe Acrobat interactive text editor!"
+    );
+
+    // Verify /AP is present on filled fields and uses Type 0 font for vector fidelity
+    for field_id in commands::forms::field_ids(&doc) {
+        if let Ok(dict) = doc.get_dictionary(field_id) {
+            let name = match dict.get(b"T") {
+                Ok(lopdf::Object::String(bytes, _)) => commands::forms::decode_pdf_string(bytes),
+                _ => continue,
+            };
+            if name == "Name_Last" || name == "Name_Middle" || name == "Address_1" {
+                assert!(dict.get(b"AP").is_ok(), "Field {} must have /AP appearance stream", name);
+                let ap_obj = dict.get(b"AP").unwrap();
+                let (_, ap_dict_res) = doc.dereference(ap_obj).unwrap();
+                let ap_dict = ap_dict_res.as_dict().unwrap();
+                let n_obj = ap_dict.get(b"N").unwrap();
+                let (_, n_stream_res) = doc.dereference(n_obj).unwrap();
+                let n_dict = n_stream_res.as_stream().unwrap();
+                let res_obj = n_dict.dict.get(b"Resources").unwrap();
+                let (_, res_dict_res) = doc.dereference(res_obj).unwrap();
+                let res_fonts_obj = res_dict_res.as_dict().unwrap().get(b"Font").unwrap();
+                let (_, res_fonts_res) = doc.dereference(res_fonts_obj).unwrap();
+                let ap_font_dict = res_fonts_res.as_dict().unwrap();
+                let ap_helv = ap_font_dict.get(b"Helvetica").or_else(|_| ap_font_dict.get(b"Helv")).unwrap();
+                let (_, ap_helv_res) = doc.dereference(ap_helv).unwrap();
+                let ap_helv_dict = ap_helv_res.as_dict().unwrap();
+                assert_eq!(
+                    ap_helv_dict.get(b"Subtype").unwrap().as_name().unwrap(),
+                    b"Type0",
+                    "/AP /N /Resources /Font must be Type 0 for vector precision rendering!"
+                );
+            }
+        }
+    }
 }
 
 #[test]

@@ -11,7 +11,6 @@ export type ViewId =
   | "images"
   | "security"
   | "annotate"
-  | "forms"
   | "activity";
 
 export const currentView = writable<ViewId>("dashboard");

@@ -1195,7 +1195,19 @@
     });
   }
 
-  $: if (activeDoc && (activeDoc.currentPage || activeDoc.scale)) {
+  let lastLoadedDocId = "";
+  let lastLoadedPage = -1;
+  let lastLoadedScale = -1;
+
+  $: if (
+    activeDoc &&
+    (activeDoc.id !== lastLoadedDocId ||
+      activeDoc.currentPage !== lastLoadedPage ||
+      activeDoc.scale !== lastLoadedScale)
+  ) {
+    lastLoadedDocId = activeDoc.id;
+    lastLoadedPage = activeDoc.currentPage;
+    lastLoadedScale = activeDoc.scale;
     loadCurrentPageFormFields();
   }
 
@@ -1206,6 +1218,47 @@
     } catch {
       currentFormFields = [];
     }
+  }
+
+  function getFieldBox(field: PdfFormField, scale: number) {
+    if (field.rectPt && field.rectPt.length === 4) {
+      const left = field.rectPt[0] * scale;
+      const top = field.rectPt[1] * scale;
+      const width = Math.max(1, (field.rectPt[2] - field.rectPt[0]) * scale);
+      const height = Math.max(1, (field.rectPt[3] - field.rectPt[1]) * scale);
+      return { left, top, width, height };
+    }
+    const left = field.rect[0];
+    const top = field.rect[1];
+    const width = Math.max(1, field.rect[2] - field.rect[0]);
+    const height = Math.max(1, field.rect[3] - field.rect[1]);
+    return { left, top, width, height };
+  }
+
+  function isEditorCheckboxChecked(field: PdfFormField, values: Record<string, string>): boolean {
+    const val = values[field.name];
+    if (val === undefined || val === null) {
+      const initial = (field.value || "").trim().toLowerCase();
+      if (!initial || initial === "off" || initial === "false" || initial === "0" || initial === "/") return false;
+      if (field.buttonValue) {
+        return initial === field.buttonValue.trim().toLowerCase() || initial === "yes" || initial === "on";
+      }
+      return true;
+    }
+    const norm = String(val).trim().toLowerCase();
+    if (!norm || norm === "off" || norm === "false" || norm === "0" || norm === "/") return false;
+    if (field.buttonValue) {
+      return norm === field.buttonValue.trim().toLowerCase() || norm === "yes" || norm === "on";
+    }
+    return true;
+  }
+
+  function isEditorRadioChecked(field: PdfFormField, values: Record<string, string>): boolean {
+    const current = (values[field.name] !== undefined ? values[field.name] : field.value || "")
+      .trim()
+      .toLowerCase();
+    const btnVal = (field.buttonValue || "").trim().toLowerCase();
+    return Boolean(btnVal && current === btnVal);
   }
 
   async function openNewFileDialog() {
@@ -3199,7 +3252,8 @@
       .map(Number)
       .filter((p) => activeDoc.annotations[p] && activeDoc.annotations[p].length > 0);
     const hasWatermarkChanges = !!activeDoc.cleanPdfBytes;
-    const hasModifications = editedPages.length > 0 || hasWatermarkChanges || activeDoc.hasUnsavedChanges;
+    const hasFormChanges = Object.keys(docFormValues).length > 0;
+    const hasModifications = editedPages.length > 0 || hasWatermarkChanges || hasFormChanges || activeDoc.hasUnsavedChanges;
 
     if (!hasModifications && !forceSaveAs) {
       pushToast("Henüz bu belgede bir düzenleme yapmadınız.", "info");
@@ -3239,13 +3293,27 @@
     busy = true;
     try {
       if (editedPages.length === 0) {
-        if (activeDoc.cleanPdfBytes) {
+        if (hasFormChanges) {
+          await fillForm(activeDoc.path, outputPath, docFormValues);
+        } else if (activeDoc.cleanPdfBytes) {
           await writePdfBytes(outputPath, activeDoc.cleanPdfBytes);
         }
+
         if (outputPath !== activeDoc.path) {
           updateDocPath(activeDoc.id, outputPath);
         }
         activeDoc.cleanPdfBytes = undefined;
+
+        // Reload document handle so editor has fresh state
+        try {
+          const refreshedHandle = await openPdf(outputPath);
+          await activeDoc.handle.destroy();
+          activeDoc.handle = refreshedHandle;
+          await renderCurrentPage();
+        } catch (reloadErr) {
+          console.warn("Handle reload after form save:", reloadErr);
+        }
+
         markDocumentSaved(activeDoc.id);
         logActivity([baseName(activeDoc.path)], "Düzenlendi & Kaydedildi", outputPath);
         pushToast(`Başarıyla kaydedildi: ${baseName(outputPath)}`, "success", {
@@ -3349,13 +3417,11 @@
       }
 
       let sourcePdfForOverlays = activeDoc.path;
-      if (Object.keys(docFormValues).length > 0) {
-        try {
-          await fillForm(activeDoc.path, outputPath, docFormValues);
-          sourcePdfForOverlays = outputPath;
-        } catch (fe) {
-          console.warn("fillForm save error:", fe);
-        }
+      let inputBytesForOverlays = activeDoc.cleanPdfBytes ?? null;
+      if (hasFormChanges) {
+        await fillForm(activeDoc.path, outputPath, docFormValues);
+        sourcePdfForOverlays = outputPath;
+        inputBytesForOverlays = null;
       }
 
       const editorData = JSON.stringify(sanitizedAnnotations);
@@ -3364,7 +3430,7 @@
         outputPath,
         overlays,
         editorData,
-        activeDoc.cleanPdfBytes ?? null
+        inputBytesForOverlays
       );
 
       activeDoc.cleanPdfBytes = undefined;
@@ -3415,9 +3481,11 @@
     } catch (e: any) {
       const errMsg = String(e?.message || e || "");
       if (
-        errMsg.includes("açık tutuluyor") ||
+        errMsg.includes("açık") ||
         errMsg.includes("Erişim engellendi") ||
         errMsg.includes("os error 5") ||
+        errMsg.includes("os error 32") ||
+        errMsg.includes("being used by another process") ||
         errMsg.includes("PermissionDenied")
       ) {
         pushToast(
@@ -4275,49 +4343,100 @@
                   {#if currentFormFields.length > 0}
                     <div class="absolute inset-0 pointer-events-none z-10">
                       {#each currentFormFields as field}
+                        {@const box = getFieldBox(field, activeDoc.scale)}
                         {#if field.type === "checkbox"}
-                          <input
-                            type="checkbox"
-                            class="absolute pointer-events-auto cursor-pointer rounded text-indigo-600 focus:ring-indigo-500 border-zinc-400"
-                            style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
-                            checked={docFormValues[field.name] === "Yes" || docFormValues[field.name] === "On" || (!docFormValues[field.name] && (field.value === "Yes" || field.value === "On"))}
+                          <button
+                            type="button"
+                            class="group absolute pointer-events-auto cursor-pointer rounded-[2px] transition-colors flex items-center justify-center p-0 select-none {isEditorCheckboxChecked(field, docFormValues) ? 'bg-indigo-600 border border-indigo-700 text-white shadow-2xs' : 'bg-[#dbe5fc]/90 hover:bg-[#c3d5fa] dark:bg-indigo-950/60 dark:hover:bg-indigo-900/70 border border-[#7ca3f8] dark:border-indigo-400/50'}"
+                            style="left: {box.left}px; top: {box.top}px; width: {box.width}px; height: {box.height}px;"
+                            title={field.name}
                             disabled={field.readOnly}
-                            on:change={(e) => {
-                              docFormValues[field.name] = e.currentTarget.checked ? (field.buttonValue || "On") : "Off";
+                            on:click={() => {
+                              const isChecked = isEditorCheckboxChecked(field, docFormValues);
+                              docFormValues[field.name] = !isChecked ? (field.buttonValue || "On") : "Off";
+                              docFormValues = { ...docFormValues };
                               if (activeDoc) markDocumentModified(activeDoc.id);
                             }}
-                          />
+                          >
+                            <span class="absolute -inset-1.5 cursor-pointer" aria-hidden="true"></span>
+                            {#if isEditorCheckboxChecked(field, docFormValues)}
+                              <svg viewBox="0 0 10 10" class="w-full h-full fill-none stroke-current stroke-[2.2] pointer-events-none" style="padding: 10%;">
+                                <polyline points="1.5 5 4 7.5 8.5 2" stroke-linecap="round" stroke-linejoin="round" />
+                              </svg>
+                            {/if}
+                          </button>
                         {:else if field.type === "radio"}
-                          <input
-                            type="radio"
-                            name={field.name}
-                            class="absolute pointer-events-auto cursor-pointer rounded-full text-indigo-600 focus:ring-indigo-500 border-zinc-400"
-                            style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
-                            checked={docFormValues[field.name] === field.buttonValue || (!docFormValues[field.name] && field.value === field.buttonValue)}
+                          <button
+                            type="button"
+                            class="group absolute pointer-events-auto cursor-pointer rounded-full transition-colors flex items-center justify-center p-0 select-none {isEditorRadioChecked(field, docFormValues) ? 'bg-white border-2 border-indigo-600 shadow-2xs' : 'bg-[#dbe5fc]/90 hover:bg-[#c3d5fa] dark:bg-indigo-950/60 dark:hover:bg-indigo-900/70 border border-[#7ca3f8] dark:border-indigo-400/50'}"
+                            style="left: {box.left}px; top: {box.top}px; width: {box.width}px; height: {box.height}px;"
+                            title="{field.name} ({field.buttonValue || ''})"
                             disabled={field.readOnly}
-                            on:change={() => {
+                            on:click={() => {
                               docFormValues[field.name] = field.buttonValue || "On";
+                              docFormValues = { ...docFormValues };
                               if (activeDoc) markDocumentModified(activeDoc.id);
                             }}
-                          />
+                          >
+                            <span class="absolute -inset-1.5 cursor-pointer" aria-hidden="true"></span>
+                            {#if isEditorRadioChecked(field, docFormValues)}
+                              <span class="rounded-full bg-indigo-600 pointer-events-none" style="width: 55%; height: 55%;"></span>
+                            {/if}
+                          </button>
+                        {:else if field.type === "choice" && field.options && field.options.length > 0}
+                          <select
+                            class="absolute pointer-events-auto rounded-[2px] bg-[#dbe5fc]/90 hover:bg-white focus:bg-white px-1 text-zinc-900 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:focus:bg-zinc-900 dark:text-zinc-100 border border-[#7ca3f8]/60 dark:border-indigo-400/50 focus:border-indigo-600 focus:outline-none shadow-none transition-colors cursor-pointer"
+                            style="left: {box.left}px; top: {box.top}px; width: {box.width}px; height: {box.height}px; font-size: {Math.max(7, Math.min(14, Math.round(box.height * 0.65)))}px; line-height: {box.height}px;"
+                            value={docFormValues[field.name] !== undefined ? docFormValues[field.name] : field.value}
+                            disabled={field.readOnly}
+                            title={field.name}
+                            on:change={(e) => {
+                              docFormValues[field.name] = e.currentTarget.value;
+                              docFormValues = { ...docFormValues };
+                              if (activeDoc) markDocumentModified(activeDoc.id);
+                            }}
+                          >
+                            <option value="">--</option>
+                            {#each field.options as opt}
+                              <option value={opt}>{opt}</option>
+                            {/each}
+                          </select>
+                        {:else if field.type === "multiline"}
+                          <textarea
+                            class="absolute pointer-events-auto rounded-[2px] bg-[#dbe5fc]/90 hover:bg-[#d0deff] focus:bg-white dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:focus:bg-zinc-900 dark:text-zinc-100 text-zinc-900 border border-[#7ca3f8]/50 dark:border-indigo-400/40 focus:border-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/40 shadow-none transition-colors resize-none leading-snug"
+                            style="left: {box.left}px; top: {box.top}px; width: {box.width}px; height: {box.height}px; font-size: {Math.max(6, Math.min(18, Math.round(box.height * 0.5)))}px; padding: 2px 3px;"
+                            value={docFormValues[field.name] !== undefined ? docFormValues[field.name] : field.value}
+                            disabled={field.readOnly}
+                            title={field.name}
+                            on:input={(e) => {
+                              docFormValues[field.name] = e.currentTarget.value;
+                              docFormValues = { ...docFormValues };
+                              if (activeDoc) markDocumentModified(activeDoc.id);
+                            }}
+                          ></textarea>
                         {:else if field.type === "pushbutton"}
                           <button
                             type="button"
-                            class="absolute pointer-events-auto rounded bg-zinc-200/60 hover:bg-zinc-300 text-[10px] text-zinc-700 font-semibold border border-zinc-400/60 shadow-xs flex items-center justify-center cursor-default"
-                            style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px;"
-                          >
-                            {field.name}
-                          </button>
+                            class="absolute pointer-events-auto rounded-[2px] cursor-pointer bg-blue-500/0 hover:bg-blue-500/15 active:bg-blue-500/25 border border-transparent hover:border-blue-400/50 transition-colors"
+                            style="left: {box.left}px; top: {box.top}px; width: {box.width}px; height: {box.height}px;"
+                            title={field.name}
+                            on:click={() => {
+                              if (field.name.toLowerCase().includes("print")) {
+                                showPrintModal = true;
+                              }
+                            }}
+                          ></button>
                         {:else}
                           <input
                             type="text"
-                            class="absolute pointer-events-auto rounded bg-blue-50/40 hover:bg-white focus:bg-white px-1 py-0.5 text-xs text-zinc-900 border border-blue-400/60 focus:border-indigo-600 focus:outline-none shadow-xs transition-colors"
-                            style="left: {field.rect[0]}px; top: {field.rect[1]}px; width: {field.rect[2] - field.rect[0]}px; height: {field.rect[3] - field.rect[1]}px; font-size: {Math.max(9, Math.min(14, (field.rect[3] - field.rect[1]) * 0.7))}px;"
+                            class="absolute pointer-events-auto rounded-[2px] bg-[#dbe5fc]/90 hover:bg-[#d0deff] focus:bg-white dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:focus:bg-zinc-900 dark:text-zinc-100 text-zinc-900 border border-[#7ca3f8]/50 dark:border-indigo-400/40 focus:border-indigo-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/40 shadow-none transition-colors"
+                            style="left: {box.left}px; top: {box.top}px; width: {box.width}px; height: {box.height}px; font-size: {Math.max(6, Math.min(20, Math.round(box.height * 0.65)))}px; line-height: {box.height}px; padding: 0 3px;"
                             value={docFormValues[field.name] !== undefined ? docFormValues[field.name] : field.value}
-                            placeholder={field.name}
                             disabled={field.readOnly}
+                            title={field.name}
                             on:input={(e) => {
                               docFormValues[field.name] = e.currentTarget.value;
+                              docFormValues = { ...docFormValues };
                               if (activeDoc) markDocumentModified(activeDoc.id);
                             }}
                           />

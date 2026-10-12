@@ -9,7 +9,7 @@
   import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import {
     LayoutGrid, FilePlus2, Scissors, RotateCw, Layers, FileArchive,
-    Image, Lock, Stamp, FileSignature, Sun, Moon, PenLine, History,
+    Image, Lock, Stamp, Sun, Moon, PenLine, History,
   } from "@lucide/svelte";
   import Toast from "./lib/components/Toast.svelte";
   import Dashboard from "./lib/views/Dashboard.svelte";
@@ -22,7 +22,6 @@
   import ImagesView from "./lib/views/ImagesView.svelte";
   import SecurityView from "./lib/views/SecurityView.svelte";
   import AnnotateView from "./lib/views/AnnotateView.svelte";
-  import FormsView from "./lib/views/FormsView.svelte";
   import ActivityView from "./lib/views/ActivityView.svelte";
 
   let showExitModal = false;
@@ -166,7 +165,6 @@
     images: ImagesView,
     security: SecurityView,
     annotate: AnnotateView,
-    forms: FormsView,
     activity: ActivityView,
   };
 
@@ -193,7 +191,6 @@
       items: [
         { id: "security", label: "Şifrele", icon: Lock },
         { id: "annotate", label: "Filigran & Numara", icon: Stamp },
-        { id: "forms", label: "Form & İmza", icon: FileSignature },
       ],
     },
   ];

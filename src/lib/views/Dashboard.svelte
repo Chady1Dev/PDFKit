@@ -4,7 +4,7 @@
   import { recentFiles, removeRecentFile, clearRecentFiles, type RecentFile } from "../recentFiles";
   import {
     FilePlus2, Scissors, RotateCw, FileArchive, Image,
-    Lock, Stamp, FileSignature, PenLine, Sparkles, History,
+    Lock, Stamp, PenLine, Sparkles, History,
     FileText, Clock, Trash2, X, ChevronRight,
   } from "@lucide/svelte";
 
@@ -39,7 +39,7 @@
   }
 
   const tools: ToolCard[] = [
-    { id: "editor", title: "PDF Düzenle", description: "Doğrudan sayfa üzerinde metin, çizim, vurgu, sansür ve imza", icon: PenLine, phase: 1 },
+    { id: "editor", title: "PDF Düzenle", description: "Doğrudan sayfa üzerinde metin, çizim, vurgu, sansür, form doldurma ve imza", icon: PenLine, phase: 1 },
     { id: "merge", title: "Birleştir", description: "Birden çok PDF'i tek dosyada birleştir", icon: FilePlus2, phase: 1 },
     { id: "split", title: "Ayır", description: "Sayfa aralıklarını ayrı dosyalara böl", icon: Scissors, phase: 1 },
     { id: "organize", title: "Organize Et", description: "Sayfaları döndür, sürükle-bırak ile sırala ve sil", icon: RotateCw, phase: 1 },
@@ -48,7 +48,6 @@
     { id: "activity", title: "Son Değişiklikler", description: "Yapılan işlemlerin yerel geçmişi ve kayıtları", icon: History, phase: 1 },
     { id: "security", title: "Şifrele", description: "AES şifreleme ve şifre kaldırma", icon: Lock, phase: 2 },
     { id: "annotate", title: "Filigran & Numara", description: "Filigran ve sayfa numarası ekle", icon: Stamp, phase: 2 },
-    { id: "forms", title: "Form & İmza", description: "Form doldur, imza görseli ekle", icon: FileSignature, phase: 2 },
   ];
 </script>
 

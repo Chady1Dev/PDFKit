@@ -189,7 +189,7 @@ PDFKit/
 │   │       ├── OrganizeView.svelte    # Sayfa Sıralama, Silme, Döndürme, Çoğaltma
 │   │       ├── CompressView.svelte    # Boyut Küçültme (DPI ve kalite kontrolü)
 │   │       ├── SecurityView.svelte    # Şifreleme, Parola Kaldırma, İzin Kısıtlama
-│   │       └── FormsView.svelte       # Form Doldurma ve İmzaları Mühürleme
+│   │       └── ActivityView.svelte    # İşlem Geçmişi & Yerel Günlükler
 │
 ├── src-tauri/                         # Yerel Backend (Rust & Tauri)
 │   ├── Cargo.toml                     # Rust paket bağımlılıkları ve optimizasyon profili
