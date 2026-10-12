@@ -199,7 +199,7 @@
 <svelte:window on:keydown={handleGlobalKeyDown} />
 
 <div class="flex h-full bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-  <nav class="flex w-56 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+  <nav class="relative z-20 flex w-56 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
     <button
       class="flex items-center gap-2 px-4 py-4 text-left text-lg font-bold tracking-tight"
       on:click={() => currentView.set("dashboard")}
@@ -247,9 +247,9 @@
           <Info size={13} />
         </button>
 
-        <div class="pointer-events-none absolute bottom-full right-0 mb-2 hidden w-max rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-100 shadow-xl ring-1 ring-zinc-700/60 group-hover:flex items-center gap-1 z-50 dark:bg-zinc-800 dark:text-zinc-200">
+        <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden w-max rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-100 shadow-xl ring-1 ring-zinc-700/60 group-hover:flex items-center gap-1 z-50 dark:bg-zinc-800 dark:text-zinc-200">
           <span>Copyright (c) 2026 github.com/cagdass1128</span>
-          <div class="absolute -bottom-1 right-2.5 h-2 w-2 rotate-45 bg-zinc-900 dark:bg-zinc-800"></div>
+          <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 bg-zinc-900 dark:bg-zinc-800"></div>
         </div>
       </div>
     </div>
