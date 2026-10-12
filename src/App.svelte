@@ -241,15 +241,15 @@
       <div class="relative group">
         <button
           type="button"
-          class="flex h-[38px] w-[38px] items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
+          class="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
           aria-label="Telif Hakkı & Bilgi"
         >
-          <Info size={15} />
+          <Info size={13} />
         </button>
 
         <div class="pointer-events-none absolute bottom-full right-0 mb-2 hidden w-max rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-100 shadow-xl ring-1 ring-zinc-700/60 group-hover:flex items-center gap-1 z-50 dark:bg-zinc-800 dark:text-zinc-200">
           <span>Copyright (c) 2026 github.com/cagdass1128</span>
-          <div class="absolute -bottom-1 right-3.5 h-2 w-2 rotate-45 bg-zinc-900 dark:bg-zinc-800"></div>
+          <div class="absolute -bottom-1 right-2.5 h-2 w-2 rotate-45 bg-zinc-900 dark:bg-zinc-800"></div>
         </div>
       </div>
     </div>
