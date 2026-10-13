@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'PaytoneOne';
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/PaytoneOne-Regular.ttf') format('truetype');
+}
+
 html,
 body,
 #app {

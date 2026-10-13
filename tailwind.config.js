@@ -3,7 +3,11 @@ export default {
   darkMode: "class",
   content: ["./index.html", "./src/**/*.{svelte,ts}"],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        brand: ["'PaytoneOne'", "sans-serif"],
+      },
+    },
   },
   plugins: [],
 };

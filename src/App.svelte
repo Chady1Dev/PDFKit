@@ -201,10 +201,19 @@
 <div class="flex h-full bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
   <nav class="relative z-20 flex w-56 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
     <button
-      class="flex items-center gap-2 px-4 py-4 text-left text-lg font-bold tracking-tight"
+      class="group flex items-center gap-2.5 px-4 py-4 text-left select-none transition-colors"
       on:click={() => currentView.set("dashboard")}
+      title="Ana Ekrana Dön"
     >
-      <LayoutGrid size={20} class="text-indigo-600" /> PDFkit
+      <img
+        src={$theme === "dark" ? "/brand-logo-dark.png" : "/brand-logo.png"}
+        alt="PDFkit"
+        class="h-7 w-7 shrink-0 object-contain drop-shadow-sm transition-transform duration-200 group-hover:scale-105 dark:drop-shadow-[0_0_8px_rgba(167,139,250,0.35)]"
+      />
+      <div class="flex items-center font-brand tracking-tight leading-none select-none">
+        <span class="text-[22px] text-zinc-900 dark:text-white">PDF</span>
+        <span class="text-[22px] bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent dark:from-violet-400 dark:via-indigo-400 dark:to-purple-300">kit</span>
+      </div>
     </button>
 
     <div class="flex-1 overflow-y-auto px-3 pb-3">
