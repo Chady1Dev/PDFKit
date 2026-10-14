@@ -798,6 +798,8 @@ fn try_advanced_layout_engine(
         "python3",
     ];
 
+    let mut last_error_message = None;
+
     for py in &python_candidates {
         if CANCELLATION_REQUESTED.load(Ordering::SeqCst) {
             if Path::new(output_path).exists() {
@@ -837,6 +839,12 @@ fn try_advanced_layout_engine(
             for line in reader.lines().flatten() {
                 if let Ok(progress) = serde_json::from_str::<ConversionProgress>(&line) {
                     let _ = app_clone.emit("conversion-progress", &progress);
+                } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                    if val.get("type").and_then(|t| t.as_str()) == Some("error") {
+                        if let Some(msg) = val.get("message").and_then(|m| m.as_str()) {
+                            last_error_message = Some(msg.to_string());
+                        }
+                    }
                 }
             }
         }
@@ -868,6 +876,10 @@ fn try_advanced_layout_engine(
             let _ = std::fs::remove_file(output_path);
         }
         return Err("Dönüştürme işlemi iptal edildi.".to_string());
+    }
+
+    if let Some(err) = last_error_message {
+        return Err(err);
     }
 
     Err("Gelişmiş motor tamamlanamadı.".to_string())

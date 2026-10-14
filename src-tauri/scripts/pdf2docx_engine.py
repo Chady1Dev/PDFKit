@@ -641,7 +641,8 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
                             if any(tb.contains(mid_pt) for tb in valid_table_bboxes):
                                 continue
                             stroke_color = d.get("color") or (0, 0, 0)
-                            stroke_w = max(0.5, d.get("width", 0.75))
+                            raw_w = d.get("width")
+                            stroke_w = max(0.5, float(raw_w) if raw_w is not None else 0.75)
                             try:
                                 conn = slide.shapes.add_connector(
                                     MSO_CONNECTOR.STRAIGHT, Pt(p1.x), Pt(p1.y), Pt(p2.x), Pt(p2.y)
@@ -834,7 +835,8 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
                             try:
                                 run = p_elem.add_run()
                                 run.text = text
-                                run.font.size = Pt(max(6, s.get("size", 9.5)))
+                                raw_sz = s.get("size")
+                                run.font.size = Pt(max(6, float(raw_sz) if raw_sz is not None else 9.5))
                                 f_name = s.get("font", "").lower()
                                 flags = s.get("flags", 0)
                                 run.font.bold = bool(flags & 4 or "bold" in f_name)
