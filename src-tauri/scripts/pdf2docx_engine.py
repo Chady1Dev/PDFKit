@@ -410,7 +410,7 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
         from pptx import Presentation
         from pptx.util import Pt
         from pptx.dml.color import RGBColor
-        from pptx.enum.shapes import MSO_CONNECTOR
+        from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
 
         doc = pymupdf.open(input_pdf)
         target_pages = [doc[i] for i in pages if 0 <= i < len(doc)] if pages else list(doc)
@@ -418,7 +418,6 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
         emit_progress(0, total_pages, 0, "start")
 
         prs = Presentation()
-        # Set slide dimensions matching PDF page
         first_page = target_pages[0] if target_pages else doc[0]
         prs.slide_width = Pt(first_page.rect.width)
         prs.slide_height = Pt(first_page.rect.height)
@@ -426,8 +425,11 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
 
         for idx, page in enumerate(target_pages):
             slide = prs.slides.add_slide(blank_layout)
+            page_w = page.rect.width
+            page_h = page.rect.height
+            page_area = page_w * page_h
 
-            # 1. Detect valid native tables FIRST so their background fills and borders are never mistaken for diagrams
+            # 1. Native Tables
             valid_tables = []
             valid_table_bboxes = []
             try:
@@ -441,60 +443,8 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
             except Exception:
                 pass
 
-            # 2. Detect and protect complex vector drawing regions (flowcharts, diagrams, schemas, figures, badges)
-            # Skip any drawing paths that belong to valid tables
-            drawings = page.get_drawings()
-            clusters = []
-            for path in drawings:
-                pr = path.get("rect")
-                if not pr:
-                    continue
-                r = pymupdf.Rect(pr)
-                if any(tb.contains(r) or (r.intersects(tb) and r.intersect(tb).get_area() > 0.4 * r.get_area()) for tb in valid_table_bboxes):
-                    continue
-
-                matched = []
-                for c in clusters:
-                    expanded = pymupdf.Rect(c["rect"].x0 - 15, c["rect"].y0 - 10, c["rect"].x1 + 15, c["rect"].y1 + 10)
-                    if expanded.intersects(r):
-                        matched.append(c)
-                if not matched:
-                    clusters.append({"rect": r, "count": 1})
-                else:
-                    first = matched[0]
-                    first["rect"] = first["rect"].include_rect(r)
-                    first["count"] += 1
-                    for other in matched[1:]:
-                        first["rect"] = first["rect"].include_rect(other["rect"])
-                        first["count"] += other["count"]
-                        clusters.remove(other)
-
+            # 2. Raster Images
             diagram_rects = []
-            for c in clusters:
-                r = c["rect"]
-                cnt = c["count"]
-                if cnt >= 5 and r.width > 20 and r.height > 18 and (r.width * r.height) < (page.rect.width * page.rect.height * 0.85):
-                    clip = pymupdf.Rect(
-                        max(0, r.x0 - 2),
-                        max(0, r.y0 - 2),
-                        min(page.rect.width, r.x1 + 2),
-                        min(page.rect.height, r.y1 + 2)
-                    )
-                    diagram_rects.append(clip)
-                    try:
-                        pix = page.get_pixmap(clip=clip, dpi=288)
-                        img_bytes = pix.tobytes("png")
-                        slide.shapes.add_picture(
-                            io.BytesIO(img_bytes),
-                            Pt(clip.x0),
-                            Pt(clip.y0),
-                            Pt(clip.width),
-                            Pt(clip.height),
-                        )
-                    except Exception:
-                        pass
-
-            # 3. Extract and place raster images at their exact positions (skip if inside diagram or table)
             for img_info in page.get_images():
                 xref = img_info[0]
                 rects = page.get_image_rects(xref)
@@ -505,20 +455,73 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
                     continue
                 img_bytes = extracted["image"]
                 for r in rects:
-                    if any(r.intersects(d) for d in diagram_rects) or any(r.intersects(tb) for tb in valid_table_bboxes):
+                    if any(r.intersects(tb) for tb in valid_table_bboxes):
                         continue
                     try:
                         slide.shapes.add_picture(
                             io.BytesIO(img_bytes),
-                            Pt(r.x0),
-                            Pt(r.y0),
-                            Pt(r.width),
-                            Pt(r.height),
+                            Pt(r.x0), Pt(r.y0), Pt(r.width), Pt(r.height)
                         )
+                        diagram_rects.append(r)
                     except Exception:
                         pass
 
-            # 4. Create native tables with exact column widths, row heights, and compact padding
+            # 3. Vector Icons & Diagram Clusters (Extract as crisp transparent high-res PNG pictures)
+            drawings = page.get_drawings()
+            raw_icons = []
+            bullet_rects = []
+
+            for d in drawings:
+                r = pymupdf.Rect(d["rect"])
+                if any(tb.contains(r) for tb in valid_table_bboxes):
+                    continue
+                if r.get_area() > 0.3 * page_area:
+                    continue
+                # Skip separator lines
+                if (r.height <= 3.5 and r.width > 15) or (r.width <= 3.5 and r.height > 15):
+                    continue
+                # Detect small bullet dots
+                if r.width <= 4.5 and r.height <= 4.5 and r.width >= 1.5 and r.height >= 1.5:
+                    bullet_rects.append(r)
+                    continue
+
+                items = d.get("items", [])
+                types = set(it[0] for it in items)
+                # Icons or diagrams: curves or multiple path items
+                if len(items) >= 4 or "c" in types or "qu" in types:
+                    if r.width >= 5 and r.height >= 2.5:
+                        raw_icons.append(r)
+
+            # Cluster nearby icon fragments (distance <= 4 pt)
+            icon_clusters = []
+            for r in raw_icons:
+                matched = []
+                for c in icon_clusters:
+                    exp = pymupdf.Rect(c.x0 - 4, c.y0 - 4, c.x1 + 4, c.y1 + 4)
+                    if exp.intersects(r):
+                        matched.append(c)
+                if not matched:
+                    icon_clusters.append(pymupdf.Rect(r))
+                else:
+                    first = matched[0]
+                    first.include_rect(r)
+                    for other in matched[1:]:
+                        first.include_rect(other)
+                        icon_clusters.remove(other)
+
+            for c in icon_clusters:
+                clip = pymupdf.Rect(max(0, c.x0 - 1), max(0, c.y0 - 1), min(page_w, c.x1 + 1), min(page_h, c.y1 + 1))
+                diagram_rects.append(clip)
+                try:
+                    pix = page.get_pixmap(clip=clip, dpi=288, alpha=True)
+                    slide.shapes.add_picture(
+                        io.BytesIO(pix.tobytes("png")),
+                        Pt(clip.x0), Pt(clip.y0), Pt(clip.width), Pt(clip.height)
+                    )
+                except Exception:
+                    pass
+
+            # 4. Render native tables
             for t in valid_tables:
                 try:
                     data = t.extract()
@@ -531,365 +534,240 @@ def convert_pdf_to_pptx(input_pdf: str, output_pptx: str, pages: list = None) ->
                     x0, y0, x1, y1 = t.bbox
                     table_w = max(10, x1 - x0)
                     table_h = max(10, y1 - y0)
-                    table_shape = slide.shapes.add_table(
-                        rows, cols, Pt(x0), Pt(y0), Pt(table_w), Pt(table_h)
-                    )
+                    table_shape = slide.shapes.add_table(rows, cols, Pt(x0), Pt(y0), Pt(table_w), Pt(table_h))
                     table = table_shape.table
-
                     avg_col_w = table_w / cols
 
-                    # Compute accurate column widths from single-column cell geometry (ignore multi-column merged headers)
                     col_w = []
                     for ci in range(cols):
-                        single_widths = []
-                        for r in t.rows:
-                            if ci < len(r.cells) and r.cells[ci]:
-                                cw = r.cells[ci][2] - r.cells[ci][0]
-                                if cols < 3 or cw <= avg_col_w * 1.75:
-                                    single_widths.append(cw)
-                        if single_widths:
-                            col_w.append(sum(single_widths) / len(single_widths))
-                        else:
-                            col_w.append(avg_col_w)
-
-                    # Normalize column widths so the table perfectly matches the PDF width (x1 - x0) without overflowing
+                        single_widths = [r.cells[ci][2] - r.cells[ci][0] for r in t.rows if ci < len(r.cells) and r.cells[ci] and (cols < 3 or (r.cells[ci][2] - r.cells[ci][0]) <= avg_col_w * 1.75)]
+                        col_w.append(sum(single_widths) / len(single_widths) if single_widths else avg_col_w)
                     sum_w = sum(col_w)
                     if sum_w > 0:
                         scale_factor = table_w / sum_w
                         col_w = [w * scale_factor for w in col_w]
-
                     for ci in range(min(cols, len(table.columns))):
                         table.columns[ci].width = Pt(col_w[ci])
-
-                    # Set accurate row heights
                     for ri in range(min(rows, len(table.rows))):
                         if ri < len(t.rows) and t.rows[ri].bbox:
                             row_h = t.rows[ri].bbox[3] - t.rows[ri].bbox[1]
                             if row_h > 5:
                                 table.rows[ri].height = Pt(row_h)
 
-                    # Merge multi-column cells (e.g. Header spanning all columns or groups)
-                    for ri, r in enumerate(t.rows):
-                        if ri >= len(table.rows):
-                            continue
-                        ci = 0
-                        while ci < cols:
-                            if ci < len(r.cells) and r.cells[ci]:
-                                c_bbox = r.cells[ci]
-                                c_w = c_bbox[2] - c_bbox[0]
-                                if c_w > avg_col_w * 1.5:
-                                    span_end = ci
-                                    while span_end + 1 < cols and (
-                                        span_end + 1 >= len(r.cells)
-                                        or not r.cells[span_end + 1]
-                                        or r.cells[span_end + 1][0] < c_bbox[2] - 1
-                                    ):
-                                        span_end += 1
-                                    if span_end > ci:
-                                        try:
-                                            table.cell(ri, ci).merge(table.cell(ri, span_end))
-                                        except Exception:
-                                            pass
-                                    ci = span_end + 1
-                                else:
-                                    ci += 1
-                            else:
-                                ci += 1
-
-                    # Populate text and formatting
                     for ri, row in enumerate(data):
                         for ci, cell_text in enumerate(row):
                             if ci < len(table.columns) and ri < len(table.rows):
                                 cell = table.cell(ri, ci)
-                                if cols > 15:
-                                    cell.margin_left = Pt(0.5)
-                                    cell.margin_right = Pt(0.5)
-                                    cell.margin_top = Pt(1.5)
-                                    cell.margin_bottom = Pt(1.5)
-                                else:
-                                    cell.margin_left = Pt(2.5)
-                                    cell.margin_right = Pt(2.5)
-                                    cell.margin_top = Pt(2)
-                                    cell.margin_bottom = Pt(2)
-
-                                raw_str = str(cell_text or "")
-                                lines = [l.strip() for l in raw_str.splitlines() if l.strip()]
-                                while len(lines) > 1 and len(lines[0]) == 1 and lines[0].islower():
-                                    lines = lines[1:]
-                                txt = clean_xml_text("\n".join(lines)).strip()
-                                cell.text = txt
+                                cell.margin_left = Pt(2.0)
+                                cell.margin_right = Pt(2.0)
+                                cell.margin_top = Pt(2.0)
+                                cell.margin_bottom = Pt(2.0)
+                                raw_str = clean_xml_text(str(cell_text or "")).strip()
+                                cell.text = raw_str
                                 for p_elem in cell.text_frame.paragraphs:
-                                    if ri == 0:
-                                        p_elem.font.size = Pt(9.5 if cols > 15 else 10.5)
-                                        p_elem.font.bold = True
-                                        p_elem.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                                    else:
-                                        p_elem.font.size = Pt(8.0 if cols > 15 else (8.5 if rows > 6 else 9.0))
-                                        p_elem.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
+                                    p_elem.font.size = Pt(9.0 if rows > 6 else 9.5)
+                                    p_elem.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
                 except Exception:
                     pass
 
-            # 5. Render vector lines and separators (underlines, column dividers)
+            # 5. Render Separators & Bullets
             for d in drawings:
-                for item in d.get("items", []):
-                    cmd = item[0]
-                    if cmd == "l":  # straight line
-                        p1, p2 = item[1], item[2]
-                        line_len = ((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2) ** 0.5
-                        if line_len > 10:
-                            mid_pt = pymupdf.Point((p1.x + p2.x) / 2, (p1.y + p2.y) / 2)
-                            if any(tb.contains(mid_pt) for tb in valid_table_bboxes):
-                                continue
-                            stroke_color = d.get("color") or (0, 0, 0)
-                            raw_w = d.get("width")
-                            stroke_w = max(0.5, float(raw_w) if raw_w is not None else 0.75)
-                            try:
-                                conn = slide.shapes.add_connector(
-                                    MSO_CONNECTOR.STRAIGHT, Pt(p1.x), Pt(p1.y), Pt(p2.x), Pt(p2.y)
-                                )
-                                conn.line.width = Pt(stroke_w)
-                                if isinstance(stroke_color, (list, tuple)) and len(stroke_color) >= 3:
-                                    conn.line.color.rgb = RGBColor(
-                                        int(stroke_color[0] * 255),
-                                        int(stroke_color[1] * 255),
-                                        int(stroke_color[2] * 255),
-                                    )
-                            except Exception:
-                                pass
-                    elif cmd == "re":  # rectangle (underline or thin divider)
-                        rect = item[1]
-                        if rect.height <= 3.5 and rect.width > 5:
-                            mid_pt = pymupdf.Point((rect.x0 + rect.x1) / 2, (rect.y0 + rect.y1) / 2)
-                            if any(tb.contains(mid_pt) for tb in valid_table_bboxes):
-                                continue
-                            try:
-                                conn = slide.shapes.add_connector(
-                                    MSO_CONNECTOR.STRAIGHT,
-                                    Pt(rect.x0),
-                                    Pt(rect.y0 + rect.height / 2),
-                                    Pt(rect.x1),
-                                    Pt(rect.y0 + rect.height / 2),
-                                )
-                                stroke_w = max(0.5, rect.height)
-                                conn.line.width = Pt(stroke_w)
-                                c = d.get("fill") or d.get("color") or (0, 0, 0)
-                                if isinstance(c, (list, tuple)) and len(c) >= 3:
-                                    conn.line.color.rgb = RGBColor(
-                                        int(c[0] * 255), int(c[1] * 255), int(c[2] * 255)
-                                    )
-                            except Exception:
-                                pass
+                r = pymupdf.Rect(d["rect"])
+                if any(tb.contains(r) for tb in valid_table_bboxes):
+                    continue
+                if any(dr.contains(r) for dr in diagram_rects):
+                    continue
+                # Horizontal line
+                if r.height <= 3.5 and r.width > 15:
+                    stroke_c = d.get("fill") or d.get("color") or (0, 0, 0)
+                    conn = slide.shapes.add_connector(
+                        MSO_CONNECTOR.STRAIGHT, Pt(r.x0), Pt(r.y0 + r.height / 2), Pt(r.x1), Pt(r.y0 + r.height / 2)
+                    )
+                    conn.line.width = Pt(max(0.5, r.height))
+                    if isinstance(stroke_c, (list, tuple)) and len(stroke_c) >= 3:
+                        conn.line.color.rgb = RGBColor(int(stroke_c[0] * 255), int(stroke_c[1] * 255), int(stroke_c[2] * 255))
+                # Bullet dots
+                elif r.width <= 4.5 and r.height <= 4.5 and r.width >= 1.5 and r.height >= 1.5:
+                    fill_c = d.get("fill") or d.get("color") or (0, 0, 0)
+                    dot = slide.shapes.add_shape(MSO_SHAPE.OVAL, Pt(r.x0), Pt(r.y0), Pt(r.width), Pt(r.height))
+                    dot.line.fill.background()
+                    if isinstance(fill_c, (list, tuple)) and len(fill_c) >= 3:
+                        dot.fill.solid()
+                        dot.fill.fore_color.rgb = RGBColor(int(fill_c[0] * 255), int(fill_c[1] * 255), int(fill_c[2] * 255))
 
-            # 6. Intelligent Column & Text Span Clustering (avoids vertical word cascade & restores flow)
-            divider_x = None
-            for d in drawings:
-                for item in d.get("items", []):
-                    if item[0] == "l":
-                        p1, p2 = item[1], item[2]
-                        if abs(p1.x - p2.x) < 3 and abs(p2.y - p1.y) > 120:
-                            divider_x = p1.x
-                            break
-                if divider_x:
-                    break
-
+            # 6. Intelligent Gutter & Column Detection
             page_dict = page.get_text("dict")
-            all_spans = []
-            for b in page_dict.get("blocks", []):
-                if b.get("type") == 0:
-                    x0, y0, x1, y1 = b["bbox"]
-                    b_rect = pymupdf.Rect(x0, y0, x1, y1)
-                    if any(
-                        tb.contains(b_rect)
-                        or (
-                            b_rect.intersects(tb)
-                            and (b_rect.intersect(tb).get_area() > 0.3 * b_rect.get_area())
-                        )
-                        for tb in valid_table_bboxes
-                    ):
-                        continue
-                    if any(
-                        d.contains(b_rect)
-                        or (
-                            b_rect.intersects(d)
-                            and (b_rect.intersect(d).get_area() > 0.3 * b_rect.get_area())
-                        )
-                        for d in diagram_rects
-                    ):
-                        continue
-                    for l in b.get("lines", []):
-                        dir_v = l.get("dir", (1.0, 0.0))
-                        # Diagonal lines (watermarks / rotated text) must not be mixed into horizontal column flow
-                        if abs(dir_v[1]) > 0.05:
-                            continue
-                        for s in l.get("spans", []):
-                            txt = clean_xml_text(s.get("text", "")).strip()
-                            if txt:
-                                all_spans.append(s)
+            raw_blocks = [b for b in page_dict.get("blocks", []) if b.get("type") == 0]
+            
+            all_blocks = []
+            for b in raw_blocks:
+                b_rect = pymupdf.Rect(b["bbox"])
+                if any(tb.contains(b_rect) for tb in valid_table_bboxes):
+                    continue
+                if any(dr.contains(b_rect) for dr in diagram_rects):
+                    continue
+                all_blocks.append(b)
 
-            def get_col_idx(s):
-                x_mid = (s["bbox"][0] + s["bbox"][2]) / 2
-                y_mid = (s["bbox"][1] + s["bbox"][3]) / 2
-                if divider_x and y_mid < 92:
-                    return 0  # Header zone above columns
-                if divider_x:
-                    return 1 if x_mid < divider_x else 2
-                return 1
+            header_bottom = 0.12 * page_h
+            footer_top = 0.95 * page_h
 
-            cols_spans = {0: [], 1: [], 2: []}
-            for s in all_spans:
-                cols_spans[get_col_idx(s)].append(s)
+            body_blocks = [
+                b for b in all_blocks
+                if b["bbox"][3] > header_bottom and b["bbox"][1] < footer_top and (b["bbox"][2] - b["bbox"][0]) < page_w * 0.70
+            ]
 
-            def cluster_spans_into_lines(spans, y_tol=3.5):
-                lines = []
-                for s in spans:
-                    b = s["bbox"]
-                    y_mid = (b[1] + b[3]) / 2
-                    matched = False
-                    for line in lines:
-                        if abs(line["y_mid"] - y_mid) < y_tol:
-                            line["spans"].append(s)
-                            line["y_mid"] = (line["y_mid"] * len(line["spans"]) + y_mid) / (
-                                len(line["spans"]) + 1
-                            )
-                            line["x0"] = min(line["x0"], b[0])
-                            line["y0"] = min(line["y0"], b[1])
-                            line["x1"] = max(line["x1"], b[2])
-                            line["y1"] = max(line["y1"], b[3])
-                            matched = True
-                            break
-                    if not matched:
-                        lines.append({
-                            "y_mid": y_mid,
-                            "x0": b[0],
-                            "y0": b[1],
-                            "x1": b[2],
-                            "y1": b[3],
-                            "spans": [s],
-                        })
-                lines.sort(key=lambda l: l["y_mid"])
-                for l in lines:
-                    l["spans"].sort(key=lambda s: s["bbox"][0])
-                return lines
-
-            def group_lines_into_paragraphs(lines, max_v_gap=14):
-                if not lines:
-                    return []
-                paras = []
-                cur_para = [lines[0]]
-                for i in range(1, len(lines)):
-                    prev = lines[i - 1]
-                    cur = lines[i]
-                    v_gap = cur["y0"] - prev["y1"]
-                    if v_gap < max_v_gap:
-                        cur_para.append(cur)
+            gutters = []
+            if len(body_blocks) >= 4:
+                bucket_size = 2.0
+                num_buckets = int(page_w / bucket_size) + 1
+                occupancy = [0] * num_buckets
+                for b in body_blocks:
+                    bx = b["bbox"]
+                    s_idx = max(0, int(bx[0] / bucket_size))
+                    e_idx = min(num_buckets - 1, int(bx[2] / bucket_size))
+                    for i in range(s_idx, e_idx + 1):
+                        occupancy[i] += 1
+                min_x = min(b["bbox"][0] for b in body_blocks)
+                max_x = max(b["bbox"][2] for b in body_blocks)
+                s_b = int(min_x / bucket_size)
+                end_b = int(max_x / bucket_size)
+                in_g = False
+                g_start = 0
+                for i in range(s_b, end_b + 1):
+                    if occupancy[i] == 0:
+                        if not in_g:
+                            in_g = True
+                            g_start = i * bucket_size
                     else:
-                        paras.append(cur_para)
-                        cur_para = [cur]
-                if cur_para:
-                    paras.append(cur_para)
-                return paras
+                        if in_g:
+                            in_g = False
+                            g_end = i * bucket_size
+                            if (g_end - g_start) >= 10.0:
+                                center_x = (g_start + g_end) / 2
+                                if 0.15 * page_w < center_x < 0.85 * page_w:
+                                    gutters.append(center_x)
 
-            def render_paras_to_slide(paras, col_max_w=None):
-                for para_lines in paras:
-                    if not para_lines:
-                        continue
-                    min_x = min(l["x0"] for l in para_lines)
-                    min_y = min(l["y0"] for l in para_lines)
-                    max_x = max(l["x1"] for l in para_lines)
-                    max_y = max(l["y1"] for l in para_lines)
+            links = page.get_links()
 
-                    content_w = max_x - min_x
-                    if col_max_w:
-                        w = min(col_max_w, max(content_w + 6, col_max_w * 0.9))
-                    else:
-                        w = content_w + 6
-                    h = max(10, max_y - min_y + 2)
+            def render_blocks_to_box(blocks_to_render, box_rect, target_slide):
+                if not blocks_to_render:
+                    return
+                x0, y0, w, h = box_rect
+                tb = target_slide.shapes.add_textbox(Pt(x0), Pt(y0), Pt(w), Pt(h))
+                tf = tb.text_frame
+                tf.word_wrap = True
+                tf.margin_left = Pt(0)
+                tf.margin_right = Pt(0)
+                tf.margin_top = Pt(0)
+                tf.margin_bottom = Pt(0)
 
-                    tb = slide.shapes.add_textbox(Pt(min_x), Pt(min_y), Pt(w), Pt(h))
-                    tf = tb.text_frame
-                    tf.word_wrap = True
-                    tf.margin_left = Pt(0)
-                    tf.margin_top = Pt(0)
-                    tf.margin_right = Pt(0)
-                    tf.margin_bottom = Pt(0)
+                sorted_blocks = sorted(blocks_to_render, key=lambda b: (round(b["bbox"][1] / 6), b["bbox"][0]))
 
-                    for li, line in enumerate(para_lines):
-                        p_elem = tf.paragraphs[0] if li == 0 else tf.add_paragraph()
+                first_p = True
+                for b in sorted_blocks:
+                    for li, l in enumerate(b.get("lines", [])):
+                        if first_p:
+                            p_elem = tf.paragraphs[0]
+                            first_p = False
+                        else:
+                            p_elem = tf.add_paragraph()
                         p_elem.space_after = Pt(2)
                         p_elem.space_before = Pt(0)
 
-                        for si, s in enumerate(line["spans"]):
-                            text = clean_xml_text(s.get("text", ""))
-                            if not text:
+                        spans = l.get("spans", [])
+                        for si, s in enumerate(spans):
+                            txt = clean_xml_text(s.get("text", ""))
+                            if not txt:
                                 continue
-                            if si > 0:
-                                prev_s = line["spans"][si - 1]
-                                dist = s["bbox"][0] - prev_s["bbox"][2]
-                                if (
-                                    dist > 1.5
-                                    and not prev_s.get("text", "").endswith(" ")
-                                    and not text.startswith(" ")
-                                ):
-                                    text = " " + text
 
-                            try:
-                                run = p_elem.add_run()
-                                run.text = text
-                                raw_sz = s.get("size")
-                                run.font.size = Pt(max(6, float(raw_sz) if raw_sz is not None else 9.5))
-                                f_name = s.get("font", "").lower()
-                                flags = s.get("flags", 0)
-                                run.font.bold = bool(flags & 4 or "bold" in f_name)
-                                run.font.italic = bool(flags & 2 or "italic" in f_name)
-                                c = s.get("color", 0)
-                                if isinstance(c, int):
-                                    run.font.color.rgb = RGBColor(
-                                        (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF
-                                    )
-                            except Exception:
-                                pass
+                            line_start_pt = pymupdf.Point(s["bbox"][0], (s["bbox"][1] + s["bbox"][3]) / 2)
+                            has_bullet_shape = any(abs(br.y0 - line_start_pt.y) < 6 and abs(br.x0 - line_start_pt.x) < 20 for br in bullet_rects)
+                            if has_bullet_shape and si == 0:
+                                txt = txt.lstrip("•\u2022 \t")
+                                if not txt:
+                                    continue
 
-            col1_w = (divider_x - 55) if divider_x else None
-            col2_w = (page.rect.width - divider_x - 45) if divider_x else None
+                            run = p_elem.add_run()
+                            run.text = txt
+                            raw_sz = s.get("size")
+                            run.font.size = Pt(max(6, float(raw_sz) if raw_sz is not None else 9.5))
+                            f_name = s.get("font", "").lower()
+                            flags = s.get("flags", 0)
+                            run.font.bold = bool(flags & 4 or "bold" in f_name)
+                            run.font.italic = bool(flags & 2 or "italic" in f_name)
+                            c = s.get("color", 0)
+                            if isinstance(c, int):
+                                run.font.color.rgb = RGBColor((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF)
 
-            # Render header zone (separate distant horizontal blocks)
-            if cols_spans[0]:
-                hdr_lines = cluster_spans_into_lines(cols_spans[0])
-                for hl in hdr_lines:
-                    h_chunks = []
-                    cur_chunk = [hl["spans"][0]]
-                    for sp in hl["spans"][1:]:
-                        if sp["bbox"][0] - cur_chunk[-1]["bbox"][2] > 35:
-                            h_chunks.append(cur_chunk)
-                            cur_chunk = [sp]
-                        else:
-                            cur_chunk.append(sp)
-                    h_chunks.append(cur_chunk)
+                            mid_pt = pymupdf.Point((s["bbox"][0] + s["bbox"][2]) / 2, (s["bbox"][1] + s["bbox"][3]) / 2)
+                            for lk in links:
+                                if "uri" in lk:
+                                    lk_r = pymupdf.Rect(lk["from"])
+                                    if lk_r.contains(mid_pt):
+                                        run.hyperlink.address = lk["uri"]
+                                        break
 
-                    for chunk in h_chunks:
-                        chunk_x0 = min(s["bbox"][0] for s in chunk)
-                        chunk_y0 = min(s["bbox"][1] for s in chunk)
-                        chunk_x1 = max(s["bbox"][2] for s in chunk)
-                        chunk_y1 = max(s["bbox"][3] for s in chunk)
-                        chunk_line = {
-                            "y_mid": hl["y_mid"],
-                            "x0": chunk_x0,
-                            "y0": chunk_y0,
-                            "x1": chunk_x1,
-                            "y1": chunk_y1,
-                            "spans": chunk,
-                        }
-                        render_paras_to_slide([[chunk_line]])
+            header_blocks = [b for b in all_blocks if b["bbox"][3] <= header_bottom]
+            footer_blocks = [b for b in all_blocks if b["bbox"][1] >= footer_top]
 
-            if cols_spans[1]:
-                col1_lines = cluster_spans_into_lines(cols_spans[1])
-                col1_paras = group_lines_into_paragraphs(col1_lines, max_v_gap=14)
-                render_paras_to_slide(col1_paras, col_max_w=col1_w)
+            if header_blocks:
+                hx0 = min(b["bbox"][0] for b in header_blocks)
+                hy0 = min(b["bbox"][1] for b in header_blocks)
+                hx1 = max(b["bbox"][2] for b in header_blocks)
+                hy1 = max(b["bbox"][3] for b in header_blocks)
+                render_blocks_to_box(header_blocks, (hx0, hy0, max(50, hx1 - hx0 + 6), max(20, hy1 - hy0 + 6)), slide)
 
-            if cols_spans[2]:
-                col2_lines = cluster_spans_into_lines(cols_spans[2])
-                col2_paras = group_lines_into_paragraphs(col2_lines, max_v_gap=14)
-                render_paras_to_slide(col2_paras, col_max_w=col2_w)
+            if footer_blocks:
+                for fb in footer_blocks:
+                    fb_x0, fb_y0, fb_x1, fb_y1 = fb["bbox"]
+                    render_blocks_to_box([fb], (fb_x0, fb_y0, max(50, fb_x1 - fb_x0 + 6), max(12, fb_y1 - fb_y0 + 2)), slide)
+
+            if not gutters:
+                body_all = [b for b in all_blocks if b not in header_blocks and b not in footer_blocks]
+                if body_all:
+                    bx0 = min(b["bbox"][0] for b in body_all)
+                    by0 = min(b["bbox"][1] for b in body_all)
+                    bx1 = max(b["bbox"][2] for b in body_all)
+                    by1 = max(b["bbox"][3] for b in body_all)
+                    render_blocks_to_box(body_all, (bx0, by0, bx1 - bx0 + 6, by1 - by0 + 6), slide)
+            else:
+                div_x = gutters[0]
+                col1_blocks = [b for b in all_blocks if b not in header_blocks and b not in footer_blocks and (b["bbox"][0] + b["bbox"][2]) / 2 < div_x]
+                col2_blocks = [b for b in all_blocks if b not in header_blocks and b not in footer_blocks and (b["bbox"][0] + b["bbox"][2]) / 2 >= div_x]
+
+                for col_idx, col_blocks in enumerate([col1_blocks, col2_blocks]):
+                    if not col_blocks:
+                        continue
+                    cx0 = min(b["bbox"][0] for b in col_blocks)
+                    cx1 = max(b["bbox"][2] for b in col_blocks)
+                    cw = max(cx1 - cx0 + 6, (div_x - cx0 - 10) if col_idx == 0 else (page_w - div_x - 30))
+
+                    h_lines = [
+                        d["rect"].y0 for d in drawings
+                        if pymupdf.Rect(d["rect"]).height <= 3.5 and pymupdf.Rect(d["rect"]).width > 30
+                        and ((d["rect"].x0 < div_x) if col_idx == 0 else (d["rect"].x0 >= div_x - 10))
+                        and header_bottom < d["rect"].y0 < footer_top
+                    ]
+                    h_lines.sort()
+
+                    if h_lines:
+                        prev_y = header_bottom
+                        for hy in h_lines:
+                            sec_b = [b for b in col_blocks if prev_y <= b["bbox"][1] < hy]
+                            if sec_b:
+                                sy0 = min(b["bbox"][1] for b in sec_b)
+                                sy1 = max(b["bbox"][3] for b in sec_b)
+                                render_blocks_to_box(sec_b, (cx0, sy0, cw, sy1 - sy0 + 6), slide)
+                            prev_y = hy
+                        sec_b = [b for b in col_blocks if b["bbox"][1] >= prev_y]
+                        if sec_b:
+                            sy0 = min(b["bbox"][1] for b in sec_b)
+                            sy1 = max(b["bbox"][3] for b in sec_b)
+                            render_blocks_to_box(sec_b, (cx0, sy0, cw, sy1 - sy0 + 6), slide)
+                    else:
+                        cy0 = min(b["bbox"][1] for b in col_blocks)
+                        cy1 = max(b["bbox"][3] for b in col_blocks)
+                        render_blocks_to_box(col_blocks, (cx0, cy0, cw, cy1 - cy0 + 6), slide)
 
             pct = int(((idx + 1) / total_pages) * 100)
             emit_progress(idx + 1, total_pages, pct, "pptx_page")
