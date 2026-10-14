@@ -21,18 +21,29 @@ fn exit_app(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn get_cli_args() -> Vec<String> {
-    std::env::args().skip(1).collect()
+    std::env::args()
+        .skip(1)
+        .map(|s| s.trim_matches('"').trim_matches('\'').trim().to_string())
+        .filter(|s| !s.is_empty() && s != "--")
+        .collect()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            let _ = app.emit("open-files", &args);
+            let clean_args: Vec<String> = args
+                .iter()
+                .map(|s| s.trim_matches('"').trim_matches('\'').trim().to_string())
+                .filter(|s| !s.is_empty() && s != "--")
+                .collect();
+            let _ = app.emit("open-files", &clean_args);
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
+                let _ = window.set_always_on_top(true);
+                let _ = window.set_always_on_top(false);
             }
         }))
         .plugin(tauri_plugin_dialog::init())
@@ -43,6 +54,7 @@ pub fn run() {
             // Phase 1 — core
             commands::document::get_pdf_info,
             commands::document::reveal_in_explorer,
+            commands::document::read_binary_file,
             commands::merge::merge_pdfs,
             commands::split::split_pdf,
             commands::rotate::rotate_pages,

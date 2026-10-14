@@ -30,18 +30,47 @@
   let unlistenSingleInstance: (() => void) | undefined;
   let hoveredDropView: ViewId | null = null;
 
+  function cleanPath(raw: unknown): string | null {
+    if (typeof raw !== "string") return null;
+    let p = raw.trim();
+    if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
+      p = p.slice(1, -1).trim();
+    }
+    if (p.startsWith("file:///")) {
+      p = decodeURIComponent(p.replace(/^file:\/\/\//, ""));
+    } else if (p.startsWith("file://")) {
+      p = decodeURIComponent(p.replace(/^file:\/\//, ""));
+    }
+    if (p.toLowerCase().endsWith(".pdf")) {
+      return p;
+    }
+    return null;
+  }
+
+  async function openIncomingFiles(rawArgs: string[]) {
+    const pdfs = (rawArgs || [])
+      .map(cleanPath)
+      .filter((p): p is string => Boolean(p));
+
+    if (pdfs.length === 0) return;
+
+    // Switch to editor view immediately so the user sees the editor without delay
+    currentView.set("editor");
+
+    for (const pdf of pdfs) {
+      try {
+        await openPdfDocument(pdf);
+      } catch (err) {
+        console.error("Failed to open incoming PDF:", pdf, err);
+      }
+    }
+  }
+
   onMount(async () => {
     // 1. Single instance listener (files opened externally while running)
     try {
       unlistenSingleInstance = await listen<string[]>("open-files", async (event) => {
-        const rawArgs = event.payload || [];
-        const pdfs = rawArgs.filter((p) => typeof p === "string" && p.toLowerCase().endsWith(".pdf"));
-        for (const pdf of pdfs) {
-          await openPdfDocument(pdf);
-        }
-        if (pdfs.length > 0) {
-          currentView.set("editor");
-        }
+        await openIncomingFiles(event.payload || []);
       });
     } catch (e) {
       console.warn("Single-instance listener failed:", e);
@@ -50,13 +79,7 @@
     // 2. Initial launch arguments (files opened on startup)
     try {
       const initialArgs = await invoke<string[]>("get_cli_args");
-      const pdfs = (initialArgs || []).filter((p) => typeof p === "string" && p.toLowerCase().endsWith(".pdf"));
-      for (const pdf of pdfs) {
-        await openPdfDocument(pdf);
-      }
-      if (pdfs.length > 0) {
-        currentView.set("editor");
-      }
+      await openIncomingFiles(initialArgs || []);
     } catch (e) {
       console.warn("Initial CLI args fetch failed:", e);
     }
@@ -94,11 +117,7 @@
           }
 
           if (destinationView === "editor") {
-            const pdfs = paths.filter((p) => p.toLowerCase().endsWith(".pdf"));
-            for (const pdf of pdfs) {
-              await openPdfDocument(pdf);
-            }
-            currentView.set("editor");
+            await openIncomingFiles(paths);
           } else {
             currentView.set(destinationView);
             pendingFiles.set({ targetView: destinationView, paths });

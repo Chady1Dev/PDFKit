@@ -1,6 +1,7 @@
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { readFile } from "@tauri-apps/plugin-fs";
+import { readBinaryFile } from "./api";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -45,14 +46,24 @@ export interface PdfDocHandle {
 }
 
 /**
- * Opens a local PDF through pdf.js. File bytes are read via the Tauri fs
- * plugin (dialog-picked paths are auto-scoped) and handed to the worker —
- * nothing ever leaves the machine.
+ * Opens a local PDF through pdf.js. File bytes are read via the native Rust
+ * command (bypassing webview scope limitations) or Tauri fs plugin and handed
+ * to the worker — nothing ever leaves the machine.
  */
 export async function openPdf(path: string, customData?: Uint8Array): Promise<PdfDocHandle> {
   // Always clone customData (.slice(0)) because pdfjs.getDocument transfers the ArrayBuffer
   // to its web worker, which would otherwise detach the caller's ArrayBuffer!
-  const data = customData ? customData.slice(0) : (await readFile(path));
+  let data: Uint8Array;
+  if (customData && customData.length > 0) {
+    data = customData.slice(0);
+  } else {
+    try {
+      data = await readBinaryFile(path);
+    } catch (e) {
+      console.warn("readBinaryFile failed, falling back to plugin-fs readFile:", e);
+      data = await readFile(path);
+    }
+  }
   const doc = await pdfjs.getDocument({ data }).promise;
   let destroyed = false;
 

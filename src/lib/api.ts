@@ -68,6 +68,11 @@ export const imagesToPdf = (inputs: string[], output: string) =>
 export const writeBinaryFile = (path: string, data: Uint8Array) =>
   invoke<void>("write_binary_file", { path, data });
 
+export const readBinaryFile = async (path: string): Promise<Uint8Array> => {
+  const bytes = await invoke<number[] | Uint8Array>("read_binary_file", { path });
+  return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+};
+
 export type CompressLevel = "lossless" | "balanced" | "maximum";
 
 export const compressPdf = (input: string, output: string, level?: CompressLevel) =>

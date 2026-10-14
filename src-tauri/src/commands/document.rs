@@ -73,3 +73,21 @@ pub fn reveal_in_explorer(path: String) -> Result<(), String> {
         Ok(())
     }
 }
+
+/// Reads the entire contents of a file as raw bytes from disk.
+/// Bypasses webview sandbox / scope limitations so that files opened via
+/// command line arguments, Windows "Open With", file associations, or drag-and-drop
+/// can be loaded into pdf.js without permission errors.
+#[tauri::command]
+pub async fn read_binary_file(path: String) -> Result<Vec<u8>, PdfError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let clean_path = path
+            .trim_matches('"')
+            .trim_matches('\'')
+            .trim();
+        let bytes = std::fs::read(clean_path)?;
+        Ok(bytes)
+    })
+    .await
+    .map_err(|e| PdfError::TaskJoin(e.to_string()))?
+}
