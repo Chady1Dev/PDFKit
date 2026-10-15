@@ -253,5 +253,5 @@ pub fn run_python_engine(
         return Err(err);
     }
 
-    Err("Gelişmiş motor tamamlanamadı.".to_string())
+    Err("Gelişmiş motor başlatılamadı. Word ve PowerPoint dönüşümleri için sisteminizde Python 3.10+ ve gerekli kütüphanelerin (pymupdf, pdf2docx, python-docx, python-pptx, xlsxwriter) kurulu olduğundan emin olun.".to_string())
 }

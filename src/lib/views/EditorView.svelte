@@ -3294,14 +3294,14 @@
 
     if (isRedactedDoc) {
       // User specified requirement: If document contains redactions, do NOT auto-overwrite!
-      // Suggest filename with _cencored suffix (e.g. maliDosyaOcak_cencored.pdf) and prompt save dialog.
+      // Suggest filename with _censored suffix (e.g. maliDosyaOcak_censored.pdf) and prompt save dialog.
       const originalPath = activeDoc.path;
       const dir = originalPath.replace(/[\\/][^\\/]+$/, "");
       const fileName = baseName(originalPath);
       const dotIdx = fileName.lastIndexOf(".");
       const stem = dotIdx > 0 ? fileName.slice(0, dotIdx) : fileName;
       const ext = dotIdx > 0 ? fileName.slice(dotIdx) : ".pdf";
-      const censoredStem = stem.endsWith("_cencored") ? stem : `${stem}_cencored`;
+      const censoredStem = (stem.endsWith("_censored") || stem.endsWith("_cencored")) ? stem : `${stem}_censored`;
       const defaultCensoredPath = dir ? `${dir}\\${censoredStem}${ext}` : `${censoredStem}${ext}`;
 
       const selected = await save({
