@@ -297,3 +297,23 @@ export const exportOfficeDocument = (
 
 export const revealInExplorer = (path: string) =>
   invoke<void>("reveal_in_explorer", { path });
+
+export interface PythonEnvStatus {
+  installed: boolean;
+  command: string | null;
+  version: string | null;
+  packages_ready: boolean;
+  missing_packages: string[];
+}
+
+export const checkPythonEnvironment = () =>
+  invoke<PythonEnvStatus>("check_python_environment");
+
+export const openExternalUrl = (url: string) =>
+  invoke<void>("open_external_url", { url });
+
+export const installPythonRuntime = () =>
+  invoke<string>("install_python_runtime");
+
+export const installPythonPackages = () =>
+  invoke<string>("install_python_packages");

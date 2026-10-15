@@ -80,6 +80,10 @@ pub fn run() {
             commands::forms::stamp_image,
             commands::convert_office::export_office_document,
             commands::convert_office::cancel_conversion,
+            commands::convert_office::check_python_environment,
+            commands::convert_office::open_external_url,
+            commands::convert_office::install_python_runtime,
+            commands::convert_office::install_python_packages,
             commands::ocr::ocr_image,
             commands::ocr::add_searchable_ocr_layer,
         ])

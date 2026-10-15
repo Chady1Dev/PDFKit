@@ -168,7 +168,7 @@ pub fn run_python_engine(
     }
 
     let script = find_python_script(app)?;
-    let python_candidates = ["python", "py", "python3"];
+    let python_candidates = get_python_candidates();
     let mut last_error_message = None;
 
     for py in &python_candidates {
@@ -255,3 +255,58 @@ pub fn run_python_engine(
 
     Err("Gelişmiş motor başlatılamadı. Word ve PowerPoint dönüşümleri için sisteminizde Python 3.10+ ve gerekli kütüphanelerin (pymupdf, pdf2docx, python-docx, python-pptx, xlsxwriter) kurulu olduğundan emin olun.".to_string())
 }
+
+/// Returns candidate Python commands and direct executable paths (in case Python was installed while PDFKit was already running and PATH is not yet refreshed in process memory).
+pub fn get_python_candidates() -> Vec<String> {
+    let mut candidates = vec![
+        "py".to_string(),
+        "python".to_string(),
+        "python3".to_string(),
+    ];
+
+    #[cfg(target_os = "windows")]
+    {
+        if Path::new(r"C:\Windows\py.exe").exists() {
+            candidates.push(r"C:\Windows\py.exe".to_string());
+        }
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let launcher = Path::new(&local_app_data).join(r"Programs\Python\Launcher\py.exe");
+            if launcher.exists() {
+                candidates.push(launcher.to_string_lossy().into_owned());
+            }
+            let py_root = Path::new(&local_app_data).join(r"Programs\Python");
+            if let Ok(entries) = std::fs::read_dir(&py_root) {
+                let mut found_dirs: Vec<_> = entries
+                    .flatten()
+                    .filter(|e| e.file_name().to_string_lossy().starts_with("Python3"))
+                    .collect();
+                found_dirs.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+                for entry in found_dirs {
+                    let exe = entry.path().join("python.exe");
+                    if exe.exists() {
+                        candidates.push(exe.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+        if let Ok(prog_files) = std::env::var("ProgramFiles") {
+            let pf_root = Path::new(&prog_files);
+            if let Ok(entries) = std::fs::read_dir(pf_root) {
+                let mut found_dirs: Vec<_> = entries
+                    .flatten()
+                    .filter(|e| e.file_name().to_string_lossy().starts_with("Python3"))
+                    .collect();
+                found_dirs.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
+                for entry in found_dirs {
+                    let exe = entry.path().join("python.exe");
+                    if exe.exists() {
+                        candidates.push(exe.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+    }
+
+    candidates
+}
+

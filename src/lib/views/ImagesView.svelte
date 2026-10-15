@@ -10,6 +10,7 @@
   import PreviewModal from "../components/PreviewModal.svelte";
   import ImageThumb from "../components/ImageThumb.svelte";
   import ImageViewerModal from "../components/ImageViewerModal.svelte";
+  import PythonGatekeeper from "../components/PythonGatekeeper.svelte";
   import { openPdf, type PdfDocHandle } from "../pdf";
   import {
     imagesToPdf,
@@ -687,8 +688,9 @@
       </div>
     {:else if fromPdfTarget === "office"}
       <!-- SECTION A: OFFICE & METİN FORMATLARI -->
-      <div class="mx-auto max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-        <h4 class="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+      <PythonGatekeeper requiredFormat={exportFormat} on:bypass={() => (fromPdfTarget = "images")}>
+        <div class="mx-auto max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+          <h4 class="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
           Hedef Çıktı Formatı Seçin
         </h4>
 
@@ -820,6 +822,7 @@
           />
         </div>
       </div>
+    </PythonGatekeeper>
     {:else if fromPdfTarget === "images"}
       <div class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 text-sm">
         <div class="flex flex-wrap items-center gap-3">

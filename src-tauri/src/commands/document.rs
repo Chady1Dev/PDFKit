@@ -85,6 +85,23 @@ pub async fn read_binary_file(path: String) -> Result<Vec<u8>, PdfError> {
             .trim_matches('"')
             .trim_matches('\'')
             .trim();
+        let p = std::path::Path::new(clean_path);
+        let ext = p
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_default();
+
+        const ALLOWED_READ_EXTS: &[&str] = &[
+            "pdf", "png", "jpg", "jpeg", "webp", "bmp", "gif", "tiff", "tif",
+        ];
+
+        if !ALLOWED_READ_EXTS.contains(&ext.as_str()) {
+            return Err(PdfError::Custom(
+                "Güvenlik kısıtlaması: Yalnızca PDF ve desteklenen görsel dosyaları okunabilir.".into(),
+            ));
+        }
+
         let bytes = std::fs::read(clean_path)?;
         Ok(bytes)
     })

@@ -39,6 +39,240 @@ pub async fn export_office_document(
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PythonEnvStatus {
+    pub installed: bool,
+    pub command: Option<String>,
+    pub version: Option<String>,
+    pub packages_ready: bool,
+    pub missing_packages: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn check_python_environment() -> Result<PythonEnvStatus, PdfError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let python_candidates = conversion::get_python_candidates();
+        let probe_code = r#"import sys, importlib.util as u; print("VER:" + sys.version.split()[0]); pkgs = ['pymupdf', 'pdf2docx', 'docx', 'pptx', 'xlsxwriter']; missing = [p for p in pkgs if u.find_spec(p) is None]; print("MISSING:" + ",".join(missing) if missing else "ALL_OK")"#;
+
+        let mut fallback_installed: Option<PythonEnvStatus> = None;
+
+        for cmd_name in &python_candidates {
+            let mut cmd = std::process::Command::new(cmd_name);
+            cmd.arg("-c").arg(probe_code);
+
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                cmd.creation_flags(CREATE_NO_WINDOW);
+            }
+
+            if let Ok(output) = cmd.output() {
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    let mut version = None;
+                    let mut packages_ready = false;
+                    let mut missing_packages = Vec::new();
+
+                    for line in text.lines() {
+                        let line = line.trim();
+                        if let Some(v) = line.strip_prefix("VER:") {
+                            version = Some(v.to_string());
+                        } else if line == "ALL_OK" {
+                            packages_ready = true;
+                        } else if let Some(m) = line.strip_prefix("MISSING:") {
+                            missing_packages = m
+                                .split(',')
+                                .filter(|s| !s.is_empty())
+                                .map(|s| s.to_string())
+                                .collect();
+                        }
+                    }
+
+                    if version.is_some() {
+                        let status = PythonEnvStatus {
+                            installed: true,
+                            command: Some(cmd_name.to_string()),
+                            version,
+                            packages_ready,
+                            missing_packages,
+                        };
+                        if packages_ready {
+                            return status;
+                        }
+                        if fallback_installed.is_none() {
+                            fallback_installed = Some(status);
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(installed_status) = fallback_installed {
+            return installed_status;
+        }
+
+        PythonEnvStatus {
+            installed: false,
+            command: None,
+            version: None,
+            packages_ready: false,
+            missing_packages: vec![
+                "pymupdf".to_string(),
+                "pdf2docx".to_string(),
+                "docx".to_string(),
+                "pptx".to_string(),
+                "xlsxwriter".to_string(),
+            ],
+        }
+    })
+    .await
+    .map_err(|e| PdfError::TaskJoin(e.to_string()))
+}
+
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        use std::process::Command;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let clean_url = url.trim();
+        let has_unsafe_chars = clean_url.chars().any(|c| {
+            matches!(
+                c,
+                '\r' | '\n' | '\0' | '"' | '\'' | '&' | '|' | ';' | '`' | '$' | '<' | '>' | '^' | '%' | ' ' | '\t'
+            )
+        });
+
+        if !has_unsafe_chars
+            && (clean_url.starts_with("https://www.python.org/")
+                || clean_url.starts_with("https://github.com/"))
+        {
+            let mut cmd = Command::new("rundll32");
+            cmd.args(["url.dll,FileProtocolHandler", clean_url]);
+            cmd.creation_flags(CREATE_NO_WINDOW);
+            cmd.spawn().map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+        Err("Güvenlik kısıtlaması: Yalnızca doğrulanmış resmi bağlantılar açılabilir.".into())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = url;
+        Ok(())
+    }
+}
+
+#[tauri::command]
+pub async fn install_python_runtime() -> Result<String, PdfError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+            let mut cmd = std::process::Command::new("winget");
+            cmd.args([
+                "install",
+                "-e",
+                "--id",
+                "Python.Python.3.13",
+                "--scope",
+                "user",
+                "--silent",
+                "--accept-package-agreements",
+                "--accept-source-agreements",
+            ]);
+            cmd.creation_flags(CREATE_NO_WINDOW);
+
+            if let Ok(output) = cmd.output() {
+                if output.status.success() {
+                    return Ok("Python başarıyla indirildi ve kuruldu!".to_string());
+                }
+            }
+
+            // Eğer sistemde zaten Python varsa veya winget 'already installed' döndürdüyse doğrula
+            for candidate in conversion::get_python_candidates() {
+                let mut check_cmd = std::process::Command::new(&candidate);
+                check_cmd.arg("--version");
+                check_cmd.creation_flags(CREATE_NO_WINDOW);
+                if let Ok(out) = check_cmd.output() {
+                    if out.status.success() {
+                        return Ok("Python sistemde hazır!".to_string());
+                    }
+                }
+            }
+        }
+
+        Err(PdfError::Custom(
+            "Otomatik Python kurulumu başlatılamadı. Lütfen 'python.org'dan İndir' butonunu kullanarak kurun.".into(),
+        ))
+    })
+    .await
+    .map_err(|e| PdfError::TaskJoin(e.to_string()))?
+}
+
+#[tauri::command]
+pub async fn install_python_packages() -> Result<String, PdfError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let python_candidates = conversion::get_python_candidates();
+        let packages = ["pymupdf", "pdf2docx", "python-docx", "python-pptx", "xlsxwriter"];
+
+        for cmd_name in &python_candidates {
+            // 1. Standart kurulum denemesi
+            let mut cmd = std::process::Command::new(cmd_name);
+            cmd.arg("-m")
+                .arg("pip")
+                .arg("install")
+                .arg("--disable-pip-version-check")
+                .args(packages);
+
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                cmd.creation_flags(CREATE_NO_WINDOW);
+            }
+
+            if let Ok(output) = cmd.output() {
+                if output.status.success() {
+                    return Ok("Dönüştürme kütüphaneleri başarıyla kuruldu!".to_string());
+                }
+
+                // 2. Eğer Python 'C:\Program Files' altına (All Users) kurulmuşsa ve yönetici izni yoksa '--user' ile kullanıcı profiline kur
+                let mut user_cmd = std::process::Command::new(cmd_name);
+                user_cmd
+                    .arg("-m")
+                    .arg("pip")
+                    .arg("install")
+                    .arg("--user")
+                    .arg("--disable-pip-version-check")
+                    .args(packages);
+
+                #[cfg(target_os = "windows")]
+                {
+                    use std::os::windows::process::CommandExt;
+                    const CREATE_NO_WINDOW: u32 = 0x08000000;
+                    user_cmd.creation_flags(CREATE_NO_WINDOW);
+                }
+
+                if let Ok(user_out) = user_cmd.output() {
+                    if user_out.status.success() {
+                        return Ok("Dönüştürme kütüphaneleri başarıyla kuruldu!".to_string());
+                    }
+                }
+            }
+        }
+        Err(PdfError::Custom(
+            "Otomatik paket kurulumu tamamlanamadı. Lütfen internet bağlantınızı kontrol edin.".into(),
+        ))
+    })
+    .await
+    .map_err(|e| PdfError::TaskJoin(e.to_string()))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

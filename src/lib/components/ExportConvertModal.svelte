@@ -22,6 +22,7 @@
   } from "../api";
   import { pushToast } from "../stores";
   import ActionButton from "./ActionButton.svelte";
+  import PythonGatekeeper from "./PythonGatekeeper.svelte";
 
   export let doc: OpenDocument;
   export let onClose: () => void;
@@ -385,39 +386,78 @@
         </label>
       </div>
 
-      <!-- Language selector -->
-      <div class="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-        <div class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-          <Info size={15} />
-          <span>Tanınan Belge Dili (Karakter Boşluk Düzeltmesi):</span>
-        </div>
-        <select
-          bind:value={language}
-          class="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 shadow-xs"
-        >
-          <option value="tr">Türkçe (ç, ğ, ı, ö, ş, ü otomatik koruma)</option>
-          <option value="en">İngilizce - US</option>
-          <option value="de">Almanca - DE</option>
-          <option value="fr">Fransızca - FR</option>
-        </select>
-      </div>
+      {#if selectedFormat === "docx" || selectedFormat === "pptx" || selectedFormat === "xlsx"}
+        <PythonGatekeeper compact={true} requiredFormat={selectedFormat} on:bypass={() => (selectedFormat = "jpeg")}>
+          <!-- Language selector -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <div class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+              <Info size={15} />
+              <span>Tanınan Belge Dili (Karakter Boşluk Düzeltmesi):</span>
+            </div>
+            <select
+              bind:value={language}
+              class="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 shadow-xs"
+            >
+              <option value="tr">Türkçe (ç, ğ, ı, ö, ş, ü otomatik koruma)</option>
+              <option value="en">İngilizce - US</option>
+              <option value="de">Almanca - DE</option>
+              <option value="fr">Fransızca - FR</option>
+            </select>
+          </div>
 
-      <!-- Action Buttons -->
-      <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-        <button
-          type="button"
-          class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
-          on:click={handleCancel}
-        >
-          Vazgeç
-        </button>
-        <ActionButton
-          label="Dönüştür ve Dışa Aktar"
-          icon={FileText}
-          {busy}
-          onClick={handleConvert}
-        />
-      </div>
+          <!-- Action Buttons -->
+          <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <button
+              type="button"
+              class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+              on:click={handleCancel}
+            >
+              Vazgeç
+            </button>
+            <ActionButton
+              label="Dönüştür ve Dışa Aktar"
+              icon={FileText}
+              {busy}
+              onClick={handleConvert}
+            />
+          </div>
+        </PythonGatekeeper>
+      {:else}
+        {#if selectedFormat !== "jpeg"}
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <div class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+              <Info size={15} />
+              <span>Tanınan Belge Dili (Karakter Boşluk Düzeltmesi):</span>
+            </div>
+            <select
+              bind:value={language}
+              class="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 shadow-xs"
+            >
+              <option value="tr">Türkçe (ç, ğ, ı, ö, ş, ü otomatik koruma)</option>
+              <option value="en">İngilizce - US</option>
+              <option value="de">Almanca - DE</option>
+              <option value="fr">Fransızca - FR</option>
+            </select>
+          </div>
+        {/if}
+
+        <!-- Action Buttons -->
+        <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+          <button
+            type="button"
+            class="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+            on:click={handleCancel}
+          >
+            Vazgeç
+          </button>
+          <ActionButton
+            label="Dönüştür ve Dışa Aktar"
+            icon={FileText}
+            {busy}
+            onClick={handleConvert}
+          />
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
