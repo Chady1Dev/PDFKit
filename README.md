@@ -9,7 +9,7 @@
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
 [![Zero Network](https://img.shields.io/badge/Security-Zero--Network%20(Offline)-2ea44f?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/cagdass1128/PDFKit)
 [![Corporate Deployment](https://img.shields.io/badge/Enterprise-MSI%20%26%20GPO%20Ready-blueviolet?style=for-the-badge&logo=windows-terminal&logoColor=white)](https://github.com/cagdass1128/PDFKit)
-[![License: GPL v3](https://img.shields.io/badge/License-GNU%20GPL%20v3.0-blue?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/License-GNU%20AGPL%20v3.0-blue?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
 
 <br/>
 
@@ -125,11 +125,12 @@ npm run build:app
 ---
 
 ## 📄 Lisans
-Bu proje **[MIT Lisansı](LICENSE)** ile lisanslanmıştır.
+Bu proje **[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)** ile lisanslanmıştır.
 
 Copyright (c) 2026 Çağdaş Polat ([github.com/cagdass1128](https://github.com/cagdass1128))
 
-* Bireysel ve kurumsal ortamlarda tamamen **ücretsiz, sınırsız ve açık** olarak kullanılabilir, değiştirilebilir ve dağıtılabilir.
+* Bireysel kullanıcılar ve **tüm kurumsal şirketler** PDFKit'i ticari veya kurum içi iş süreçlerinde tamamen **ücretsiz ve sınırsız** olarak kullanabilir.
+* AGPL-3.0 lisansı gereğince kaynak kodlar herkese açık tutulur (Copyleft).
 * Detaylar için [LICENSE](LICENSE) dosyasına göz atabilirsiniz.
 
 ---

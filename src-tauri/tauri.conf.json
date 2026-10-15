@@ -35,12 +35,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "copyright": "Copyright © 2026 Çağdaş Polat (github.com/cagdass1128) - MIT License",
+    "copyright": "Copyright © 2026 Çağdaş Polat (github.com/cagdass1128) - AGPL-3.0 License",
     "publisher": "Çağdaş Polat",
     "homepage": "https://github.com/cagdass1128/PDFKit",
-    "shortDescription": "Ultra-lightweight local-first PDF toolbox (MIT License)",
+    "shortDescription": "Ultra-lightweight local-first PDF toolbox (AGPL-3.0 License)",
     "resources": [
-      "scripts/*"
+      "scripts/*",
+      "scripts/**/*"
     ],
     "fileAssociations": [
       {
