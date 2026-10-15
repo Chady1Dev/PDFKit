@@ -164,6 +164,11 @@
   }
 
   function handleGlobalKeyDown(e: KeyboardEvent) {
+    if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R"))) {
+      e.preventDefault();
+      return;
+    }
+
     if ((e.ctrlKey || e.metaKey) && (e.key === "q" || e.key === "Q")) {
       e.preventDefault();
       if (hasAnyUnsavedChanges()) {

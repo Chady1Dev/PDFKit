@@ -24,7 +24,8 @@
   let lastHandle: PdfDocHandle | null = null;
   let links: PdfLink[] = [];
 
-  onMount(async () => {
+  async function updatePageDims() {
+    if (!handle) return;
     try {
       const dims = await handle.getPageDimensions(page);
       if (dims && dims.width > 0 && dims.height > 0) {
@@ -33,6 +34,10 @@
     } catch (e) {
       console.warn(`Dims error for page ${page}:`, e);
     }
+  }
+
+  onMount(() => {
+    updatePageDims();
   });
 
   $: pagePixelWidth = Math.round(pageDims.width * scale);
@@ -43,6 +48,7 @@
   $: if (handle !== lastHandle) {
     lastHandle = handle;
     isRendered = false;
+    updatePageDims();
     if (isVisible) {
       tick().then(renderPageContent);
     }
@@ -63,14 +69,25 @@
     if (!canvasEl) return;
     try {
       const rendered = await handle.renderPage(page, scale);
+      if (rendered && rendered.width > 0 && rendered.height > 0 && scale > 0) {
+        const actualWidth = rendered.width / scale;
+        const actualHeight = rendered.height / scale;
+        if (Math.abs(pageDims.width - actualWidth) > 0.5 || Math.abs(pageDims.height - actualHeight) > 0.5) {
+          pageDims = { width: actualWidth, height: actualHeight };
+        }
+      }
       canvasEl.width = rendered.width;
       canvasEl.height = rendered.height;
+      canvasEl.style.width = `${rendered.width}px`;
+      canvasEl.style.height = `${rendered.height}px`;
       const ctx = canvasEl.getContext("2d")!;
       ctx.drawImage(rendered, 0, 0);
 
       if (overlayEl) {
         overlayEl.width = rendered.width;
         overlayEl.height = rendered.height;
+        overlayEl.style.width = `${rendered.width}px`;
+        overlayEl.style.height = `${rendered.height}px`;
         if (!isCurrentPage) {
           drawAnnotations(overlayEl, annotations, scale);
         }
@@ -249,7 +266,8 @@
 <div
   id="continuous-page-{page}"
   data-page={page}
-  class="relative mb-2 flex flex-col items-center transition-all {isCurrentPage ? 'ring-2 ring-indigo-500/80 rounded-lg p-1 bg-indigo-50/20 dark:bg-indigo-950/20' : 'p-1 cursor-pointer'}"
+  class="relative mb-3 flex flex-col items-center transition-all w-fit rounded-xl p-2 {isCurrentPage ? 'ring-2 ring-indigo-500/80 bg-indigo-50/25 dark:bg-indigo-950/25 shadow-md' : 'hover:ring-1 hover:ring-indigo-400/40 cursor-pointer'}"
+  style="width: {pagePixelWidth + 16}px; min-width: {pagePixelWidth + 16}px;"
   on:mousedown={(e) => {
     if (e.button === 1) return;
     if (onMouseDownPage) {
@@ -263,7 +281,7 @@
   }}
 >
   <!-- Page Header Tag -->
-  <div class="mb-0.5 flex items-center justify-between w-full max-w-full px-2 text-[10px] text-zinc-400 dark:text-zinc-500 select-none">
+  <div class="mb-1 flex items-center justify-between w-full px-1 text-[10px] text-zinc-400 dark:text-zinc-500 select-none">
     <span class="inline-flex items-center gap-1 font-semibold {isCurrentPage ? 'text-indigo-600 dark:text-indigo-400' : ''}">
       <FileText size={11} /> Sayfa {page}
     </span>
@@ -277,7 +295,7 @@
   <!-- Page Viewport Container -->
   <div
     id="continuous-page-viewport-{page}"
-    class="relative rounded bg-white shadow-xl"
+    class="relative rounded bg-white shadow-xl overflow-hidden"
     style="width: {pagePixelWidth}px; height: {pagePixelHeight}px; min-width: {pagePixelWidth}px; min-height: {pagePixelHeight}px;"
   >
     {#if isVisible}

@@ -1,6 +1,7 @@
 pub mod annotate;
 pub mod compress;
 pub mod convert_office;
+pub mod conversion;
 pub mod document;
 pub mod forms;
 pub mod images;

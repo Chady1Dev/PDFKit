@@ -99,6 +99,8 @@
   // Faz 2 Reader state
   let viewLayout: "single" | "continuous" = "continuous";
   let isReadingMode = false;
+  let isProgrammaticScrolling = false;
+  let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null;
   let showZoomMenu = false;
   let textLayerDiv: HTMLDivElement | null = null;
   let currentLinks: PdfLink[] = [];
@@ -1341,6 +1343,9 @@
 
   function scrollToPage(p: number, smooth: boolean = true) {
     if (!canvasContainer || !activeDoc) return;
+    isProgrammaticScrolling = true;
+    if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer);
+
     const buf = activeDoc.pageCount <= 25 ? activeDoc.pageCount : 4;
     visiblePageRange = {
       start: Math.max(1, p - buf),
@@ -1348,13 +1353,23 @@
     };
     setTimeout(() => {
       const el = document.getElementById(`continuous-page-${p}`);
-      if (el) {
-        el.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+      if (el && canvasContainer) {
+        const containerRect = canvasContainer.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        const offset = isReadingMode ? 65 : 20;
+        const targetScrollTop = canvasContainer.scrollTop + (elRect.top - containerRect.top) - offset;
+        canvasContainer.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: smooth ? "smooth" : "auto",
+        });
       }
-    }, 20);
+      programmaticScrollTimer = setTimeout(() => {
+        isProgrammaticScrolling = false;
+      }, smooth ? 450 : 50);
+    }, 25);
   }
 
-  function setPage(p: number, keepSelection: boolean = false, customDirection?: "down" | "up", autoScroll: boolean = false) {
+  function setPage(p: number, keepSelection: boolean = false, customDirection?: "down" | "up", autoScroll: boolean = true) {
     if (!activeDoc) return;
     if (p < 1 || p > activeDoc.pageCount) return;
     if (p === activeDoc.currentPage && !customDirection && !autoScroll) return;
@@ -1444,10 +1459,18 @@
   }
 
   async function toggleReadingMode() {
+    const targetPage = activeDoc?.currentPage || 1;
     isReadingMode = !isReadingMode;
     try {
       await getCurrentWindow().setFullscreen(isReadingMode);
     } catch {}
+
+    setTimeout(() => {
+      scrollToPage(targetPage, false);
+    }, 120);
+    setTimeout(() => {
+      scrollToPage(targetPage, false);
+    }, 300);
   }
 
   function handleLinkClick(link: PdfLink, e?: MouseEvent) {
@@ -1613,6 +1636,7 @@
 
   function handleContinuousScroll() {
     if (viewLayout !== "continuous" || !canvasContainer || !activeDoc) return;
+    if (isProgrammaticScrolling) return;
     const scrollTop = canvasContainer.scrollTop;
     const viewportHeight = canvasContainer.clientHeight;
     const centerY = scrollTop + viewportHeight / 2;
@@ -3025,6 +3049,11 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && (e.key === "r" || e.key === "R"))) {
+      e.preventDefault();
+      return;
+    }
+
     if (textInputVisible) return;
 
     const isCtrl = e.ctrlKey || e.metaKey;
@@ -4322,8 +4351,8 @@
         {/if}
 
         {#if activeDoc}
-          <div class="flex flex-col items-center py-4">
-            {#each Array.from({ length: activeDoc.pageCount }, (_, i) => i + 1) as p (p)}
+          <div class="flex flex-col items-center py-4 min-w-fit w-full">
+            {#each Array.from({ length: activeDoc.pageCount }, (_, i) => i + 1) as p (`${activeDoc.id}-p${p}`)}
               <ContinuousPage
                 page={p}
                 handle={activeDoc.handle}
