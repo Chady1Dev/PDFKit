@@ -25,12 +25,20 @@ pub struct OcrPageResult {
 
 fn get_ocr_script_path() -> PathBuf {
     let script_path = PathBuf::from("src-tauri/scripts/ocr_engine.ps1");
-    if !script_path.exists() {
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(dir) = exe.parent() {
-                let candidate = dir.join("scripts").join("ocr_engine.ps1");
-                if candidate.exists() {
-                    return candidate;
+    if script_path.exists() {
+        return script_path;
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidates = [
+                dir.join("scripts").join("ocr_engine.ps1"),
+                dir.join("ocr_engine.ps1"),
+                dir.join("PDFKit").join("src-tauri").join("scripts").join("ocr_engine.ps1"),
+                dir.join("PDFKit").join("scripts").join("ocr_engine.ps1"),
+            ];
+            for c in &candidates {
+                if c.exists() {
+                    return c.clone();
                 }
             }
         }

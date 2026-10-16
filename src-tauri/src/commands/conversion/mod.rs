@@ -99,11 +99,14 @@ pub fn find_python_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         let candidates = [
             exe_dir.join("scripts").join("python_engine").join("dispatcher.py"),
             exe_dir.join("python_engine").join("dispatcher.py"),
+            exe_dir.join("PDFKit").join("src-tauri").join("scripts").join("python_engine").join("dispatcher.py"),
+            exe_dir.join("PDFKit").join("scripts").join("python_engine").join("dispatcher.py"),
             exe_dir.join("scripts").join("pdf2docx_engine.py"),
             exe_dir.join("pdf2docx_engine.py"),
             exe_dir.join("..").join("..").join("python_engine").join("dispatcher.py"),
             exe_dir.join("..").join("..").join("src-tauri").join("scripts").join("pdf2docx_engine.py"),
             exe_dir.join("..").join("src-tauri").join("scripts").join("pdf2docx_engine.py"),
+            exe_dir.join("..").join("src-tauri").join("scripts").join("python_engine").join("dispatcher.py"),
         ];
         for c in &candidates {
             if c.exists() {
@@ -114,6 +117,8 @@ pub fn find_python_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
     // 3. Fallback dev paths
     let dev_candidates = [
+        "PDFKit/src-tauri/scripts/python_engine/dispatcher.py",
+        "PDFKit/scripts/python_engine/dispatcher.py",
         "python_engine/dispatcher.py",
         "src-tauri/scripts/python_engine/dispatcher.py",
         "src-tauri/scripts/pdf2docx_engine.py",
