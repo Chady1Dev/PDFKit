@@ -203,13 +203,13 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 <div
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4"
   on:click|self={handleCancel}
 >
-  <div class="relative w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 animate-in fade-in zoom-in-95 duration-150">
+  <div class="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
     <!-- Active Progress State (Shown exclusively while busy) -->
     {#if busy && progress >= 0}
-      <div>
+      <div class="p-6">
         <div class="mb-4 flex items-center justify-between">
           <div class="flex items-center gap-2.5 text-sm font-bold text-zinc-900 dark:text-zinc-100">
             <RotateCw size={18} class="animate-spin text-indigo-600 dark:text-indigo-400" />
@@ -239,8 +239,8 @@
         </div>
       </div>
     {:else}
-      <!-- Header -->
-      <div class="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+      <!-- Header (Fixed top) -->
+      <div class="flex items-center justify-between px-5 sm:px-6 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
         <h3 class="text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
           Hedef Çıktı Formatı Seçin
         </h3>
@@ -253,8 +253,10 @@
         </button>
       </div>
 
-      <!-- Format Cards Grid (Matches ImagesView styling) -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 my-5">
+      <!-- Scrollable Body (Ensures content and action buttons are always accessible on all displays) -->
+      <div class="overflow-y-auto px-5 sm:px-6 py-4 flex-1">
+        <!-- Format Cards Grid (Matches ImagesView styling) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
         <!-- DOCX -->
         <label
           class="relative flex flex-col justify-between rounded-xl border p-4 cursor-pointer transition-all
@@ -458,6 +460,7 @@
           />
         </div>
       {/if}
+      </div>
     {/if}
   </div>
 </div>

@@ -54,6 +54,9 @@
     "windows": {
       "nsis": {
         "installMode": "both"
+      },
+      "wix": {
+        "language": "tr-TR"
       }
     }
   }
