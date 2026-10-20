@@ -50,13 +50,14 @@ Günlük belge işlemlerinde genellikle iki seçenek arasında kalınır:
 
 ## ⚡ Karşılaştırma Tablosu
 
-| Özellik / Kriter | 📑 **PDFkit** | 🔴 **Adobe Acrobat Reader** | 📄 **LibreOffice (Draw)** |
+| Özellik / Kriter | 📑 **PDFkit** | 🔴 **Adobe Acrobat (Pro / Reader)** | 📄 **LibreOffice (Draw)** |
 | :--- | :---: | :---: | :---: |
+| **Maliyet / Lisans** | **%100 Ücretsiz & Açık Kaynak** | **₺478,80/ay (₺5.745/yıl)** *(Reader'da araçlar kilitlidir)* | Ücretsiz & Açık Kaynak |
 | **Kurulum Boyutu** | **`4.15 MB`** *(Tek tıkla hazır)* | ~`350 – 500 MB` | ~`300 – 450 MB` |
 | **Açılış Hızı** | **`< 0.3 saniye`** *(Anında)* | 2.5 – 5.0 saniye | 3.0 – 6.0 saniye |
 | **Boşta RAM Tüketimi** | **`~35 MB`** *(Tauri v2 + Rust)* | 350 – 500 MB+ | 250 – 400 MB |
 | **Gizlilik & Ağ İletişimi** | **%100 Çevrimdışı (0 KB Veri)** | Arka plan bulut servisleri | Yerel (telemetri opsiyonlu) |
-| **PDF Sayfa Yönetimi** | Sırala, ayır, birleştir, döndür, sil | Ücretli abonelik ($239/yıl) | Sayfaları çizim nesnesine bozar |
+| **PDF Sayfa Yönetimi** | Sırala, ayır, birleştir, döndür, sil | Pro abonelik gerektirir (Reader'da kilitli) | Sayfaları çizim nesnesine bozar |
 | **Kalıcı / Fiziksel Sansürleme** | **Var** *(Metin dosyadan tamamen silinir)* | Sadece ücretli Pro sürümde | Yok *(Üstüne çizilen kutu kaldırılabilir)* |
 | **Akıllı Filigran Silme** | **Tek Tıkla Bölge Analizi (Başlık/Gövde/Dipnot)** | Yok *(Manuel uğraş)* | Yok *(Her harf ayrı vektör nesnesi olur)* |
 | **Kurumsal Dağıtım (GPO)** | **`5.78 MB MSI`** paketi hazır | Hantal MSI paketleri | Büyük MSI paketi |
