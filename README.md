@@ -11,14 +11,6 @@
   <b>Türkçe</b> &nbsp;•&nbsp; <a href="README-EN.md">English</a>
 </p>
 
-[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
-[![Tauri v2](https://img.shields.io/badge/Tauri-v2.0-FFC131?style=for-the-badge&logo=tauri&logoColor=black)](https://tauri.app/)
-[![Rust Core](https://img.shields.io/badge/Rust-2021%20Edition-DEA584?style=for-the-badge&logo=rust&logoColor=black)](https://www.rust-lang.org/)
-[![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
-[![Zero Network](https://img.shields.io/badge/Security-Zero--Network%20(Offline)-2ea44f?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
-[![Corporate Deployment](https://img.shields.io/badge/Enterprise-MSI%20%26%20GPO%20Ready-blueviolet?style=for-the-badge&logo=windows-terminal&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
-[![License: AGPL v3](https://img.shields.io/badge/License-GNU%20AGPL%20v3.0-blue?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
-
 <br/>
 
 > **"En iyi sonuç ve iyileştirilmiş belge dönüştürme için lütfen uygulamanın en güncel sürümünü kullanın.PDF'ten Word, Excel ve PowerPoint'e dönüştürme motorumuz düzenli olarak güncellenecektir."**
@@ -71,7 +63,7 @@ Günlük belge işlemlerinde genellikle iki seçenek arasında kalınır:
 | Sıkıştırma | ✅ | ❌ Ücretli sürümde | ⚠️ Dışa aktarırken |
 | Kalıcı sansürleme | ✅ | ❌ Ücretli sürümde | ⚠️ Tüm belge resme çevrilir |
 | Filigran temizleme | ✅ | ❌ | ❌ |
-| PDF → Word / Excel / PowerPoint | ✅ *(Word ve PPT için Python gerekir)* | ❌ Ücretli sürümde | ❌ |
+| PDF → Word / Excel / PowerPoint | ✅ *(Word ve PPTx için Python gerekir)* | ❌ Ücretli sürümde | ❌ |
 | Belge düzenini koruma | ✅ | ✅ | ⚠️ PDF çizim olarak açılır, düzen kayabilir |
 
 ---
