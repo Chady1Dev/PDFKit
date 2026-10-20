@@ -17,8 +17,8 @@
 
 <br/>
 
-[📥 Windows Installer (.exe)](https://github.com/Chady1Dev/PDFKit/releases) • 
-[🏢 Enterprise Deployment Package (.msi)](https://github.com/Chady1Dev/PDFKit/releases) • 
+[📥 Windows Installer (.exe)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.0/PDFkit_0.1.0_x64-setup.exe) • 
+[🏢 Enterprise Deployment Package (.msi)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.0/PDFkit_0.1.0_x64_tr-TR.msi) • 
 [📖 Technical Documentation](DOCUMENTATION.md)
 
 </div>
