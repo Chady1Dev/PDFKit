@@ -34,7 +34,7 @@
 Günlük belge işlemlerinde genellikle iki seçenek arasında kalınır:
 
 1. **Online PDF Araçları (iLovePDF, Smallpdf vb.):** Belgeleri yabancı sunuculara yükler. Kişisel veriler, ticari sırlar veya sınav belgeleri internete çıkar; **KVKK ve GDPR** açısından ciddi risk taşır. Ayrıca dosya sınırı ve kota koyarak abonelik ister.
-2. **Geleneksel Masaüstü Devleri (Adobe Acrobat Pro vb.):** Yüzlerce megabayt disk alanı kaplar, arka planda onlarca telemetri ve güncelleme servisi çalıştırır ve yıllık fahiş lisans ücretleri talep eder.
+2. **Geleneksel Masaüstü Devleri (Adobe Acrobat Pro vb.):** Yüzlerce megabayt disk alanı kaplar, arka planda onlarca telemetri ve güncelleme servisi çalıştırır ve yıllık lisans ücretleri talep eder.
 
 **PDFkit**, belgeleri bilgisayarınızın dışına çıkarmadan; düzenleme, sayfa yönetimi, akıllı filigran silme, fiziksel sansürleme ve Office formatlarına dönüşüm sağlayan **tamamen yerel, güvenli, bağımsız ve ücretsiz** bir PDF çalışma istasyonudur.
 
@@ -48,7 +48,8 @@ Günlük belge işlemlerinde genellikle iki seçenek arasında kalınır:
 | :--- | :---: | :---: | :---: |
 | **Lisans** | Ücretsiz, açık kaynak | Ücretsiz, kapalı kaynak | Ücretsiz, açık kaynak |
 | **Platform** | Windows | Windows, macOS, mobil | Windows, macOS, Linux |
-| **Kurulum boyutu** | **4.15 MB** | Yüzlerce MB | ~350 MB *(ofis paketiyle birlikte)* |
+| **Kurulum boyutu** | **14 MB** | ~1.1 GB | ~340 MB  |
+| **PDF Edit - Ram Kullanımı** | **~300 MB** | ~620 MB | ~ Kilitlendi / Yanıt vermedi  |
 | **Hesap / internet** | Gerekmez *(%100 Çevrimdışı)* | Bazı özellikler hesap ister | Gerekmez |
 
 ### Ne Yapabilirim?
@@ -96,16 +97,6 @@ Geleneksel araçlar metnin üstünü sadece siyah bir kutuyla örter; altındaki
 
 PDFkit'in tüm temel özellikleri (düzenleme, sansür, sayfa araçları, filigran, formlar) **hiçbir ek kurulum gerektirmeden** çalışır. Word ve PowerPoint dönüşümleri için bilgisayarınızda Python bulunması önerilir:
 
-```powershell
-# 1. Python'u kurun (veya python.org adresinden edinin)
-winget install -e --id Python.Python.3.13
-
-# 2. Gerekli açık kaynak kütüphaneleri yükleyin
-py -m pip install pymupdf pdf2docx python-docx python-pptx xlsxwriter
-```
-
-Detaylı bilgi için [DOCUMENTATION.md](DOCUMENTATION.md) dosyasına göz atabilirsiniz.
-
 ---
 
 ## 🏢 Kurumsal Dağıtım (IT & Sistem Yöneticileri)
@@ -118,6 +109,8 @@ msiexec.exe /i "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 
 # Sessiz Kaldırma
 msiexec.exe /x "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
+```
+Detaylı bilgi için [DOCUMENTATION.md](DOCUMENTATION.md) dosyasına göz atabilirsiniz.
 ```
 > 📌 **Önemli Not:** En iyi sonuç için lütfen uygulamanın en güncel sürümünü kullanın. PDF'ten Word, Excel ve PowerPoint'e dönüştürme motorumuz düzenli olarak güncellenip iyileştirilmektedir.
 ---
