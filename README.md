@@ -48,20 +48,31 @@ Günlük belge işlemlerinde genellikle iki seçenek arasında kalınır:
 
 ---
 
-## ⚡ Karşılaştırma Tablosu
+## ⚡ Karşılaştırma
 
-| Özellik / Kriter | 📑 **PDFkit** | 🔴 **Adobe Acrobat Pro** | 📄 **LibreOffice (Draw)** |
+### Genel
+
+| | **PDFkit** | **Adobe Acrobat Reader** | **LibreOffice Draw** |
 | :--- | :---: | :---: | :---: |
-| **Maliyet / Lisans** | **%100 Ücretsiz & Açık Kaynak** | **Ücretli Abonelik** | Ücretsiz & Açık Kaynak |
-| **Kurulum Boyutu** | **`4.15 MB`** *(Tek tıkla hazır)* | ~`350 – 500 MB` | ~`300 – 450 MB` |
-| **Açılış Hızı** | **`< 0.3 saniye`** *(Anında)* | 2.5 – 5.0 saniye | 3.0 – 6.0 saniye |
-| **Boşta RAM Tüketimi** | **`~35 MB`** *(Tauri v2 + Rust)* | 350 – 500 MB+ | 250 – 400 MB |
-| **Gizlilik & Ağ İletişimi** | **%100 Çevrimdışı (0 KB Veri)** | Arka plan bulut servisleri | Yerel (telemetri opsiyonlu) |
-| **PDF Sayfa Yönetimi** | Sırala, ayır, birleştir, döndür, sil | Mevcut | Sayfaları çizim nesnesine bozar |
-| **Kalıcı / Fiziksel Sansürleme** | **Var** *(Metin dosyadan tamamen silinir)* | Mevcut | Yok *(Üstüne çizilen kutu kaldırılabilir)* |
-| **Akıllı Filigran Silme** | **Tek Tıkla Bölge Analizi (Başlık/Gövde/Dipnot)** | Yok *(Manuel uğraş)* | Yok *(Her harf ayrı vektör nesnesi olur)* |
-| **Kurumsal Dağıtım (GPO)** | **`5.78 MB MSI`** paketi hazır | Hantal MSI paketleri | Büyük MSI paketi |
-| **Windows Optimizasyonu** | Yerel Windows yazdırma ve GDI motoru ile derin entegrasyon | Çapraz platform ağırlığı | Ağır VCL çalışma zamanı |
+| **Lisans** | Ücretsiz, açık kaynak | Ücretsiz, kapalı kaynak | Ücretsiz, açık kaynak |
+| **Platform** | Windows | Windows, macOS, mobil | Windows, macOS, Linux |
+| **Kurulum boyutu** | **4.15 MB** | Yüzlerce MB | ~350 MB *(ofis paketiyle birlikte)* |
+| **Hesap / internet** | Gerekmez *(%100 Çevrimdışı)* | Bazı özellikler hesap ister | Gerekmez |
+
+### Ne Yapabilirim?
+
+| İşlem | **PDFkit** | **Adobe Acrobat Reader** | **LibreOffice Draw** |
+| :--- | :---: | :---: | :---: |
+| Not, vurgulama, imza | ✅ | ✅ | ✅ |
+| Form doldurma | ✅ | ✅ | ⚠️ Sınırlı |
+| Birleştirme / ayırma | ✅ | ❌ Ücretli sürümde | ⚠️ Manuel |
+| Sayfa sıralama, döndürme, silme | ✅ | ❌ Ücretli sürümde | ✅ |
+| Şifreleme ve izinler | ✅ | ❌ Ücretli sürümde | ✅ Dışa aktarırken |
+| Sıkıştırma | ✅ | ❌ Ücretli sürümde | ⚠️ Dışa aktarırken |
+| Kalıcı sansürleme | ✅ | ❌ Ücretli sürümde | ✅ |
+| Filigran temizleme | ✅ | ❌ | ❌ |
+| PDF → Word / Excel / PowerPoint | ✅ *(Word ve PPT için Python gerekir)* | ❌ Ücretli sürümde | ❌ |
+| Belge düzenini koruma | ✅ | ✅ | ⚠️ PDF çizim olarak açılır, düzen kayabilir |
 
 ---
 

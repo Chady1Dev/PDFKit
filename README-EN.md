@@ -50,18 +50,29 @@ Modern knowledge workers and organizations are typically forced to choose betwee
 
 ## ⚡ Comparison
 
-| Feature / Metric | 📑 **PDFkit** | 🔴 **Adobe Acrobat Pro** | 📄 **LibreOffice (Draw)** |
+### Overview
+
+| | **PDFkit** | **Adobe Acrobat Reader** | **LibreOffice Draw** |
 | :--- | :---: | :---: | :---: |
-| **Cost / License** | **100% Free & Open Source** | **Paid Subscription** | Free & Open Source |
-| **Installer Size** | **`4.15 MB`** *(Instant setup)* | ~`350 – 500 MB` | ~`300 – 450 MB` |
-| **Startup Time** | **`< 0.3 sec`** *(Instantaneous)* | 2.5 – 5.0 sec | 3.0 – 6.0 sec |
-| **Idle RAM Usage** | **`~35 MB`** *(Rust core)* | 350 – 500 MB+ | 250 – 400 MB |
-| **Privacy & Network** | **100% Offline (0 KB Data)** | Background cloud telemetry | Local (optional telemetry) |
-| **Page Organization** | Reorder, merge, split, rotate, delete | Available | Breaks layouts into vector shapes |
-| **Physical Redaction** | **Yes** *(Text bytecode permanently removed)* | Available | No *(Overlay boxes can be deleted)* |
-| **Smart Watermark Removal** | **One-Click Zone Analysis (Header/Body/Footer)** | No *(Tedious manual editing)* | No *(Each letter becomes a shape)* |
-| **Enterprise Deployment** | **`5.78 MB MSI`** ready for GPO | Complex bulky MSI transforms | Large MSI package |
-| **Windows Optimization** | Deep native integration with Windows Print Spooler and GDI | Cross-platform bloat | Heavy VCL runtime overhead |
+| **License** | Free & open source | Free, proprietary | Free & open source |
+| **Platform** | Windows | Windows, macOS, Mobile | Windows, macOS, Linux |
+| **Installer Size** | **4.15 MB** | Hundreds of MB | ~350 MB *(bundled with office suite)* |
+| **Account / Network** | Not required *(100% Offline)* | Some features require login | Not required |
+
+### What Can I Do?
+
+| Feature / Action | **PDFkit** | **Adobe Acrobat Reader** | **LibreOffice Draw** |
+| :--- | :---: | :---: | :---: |
+| Annotate, highlight, sign | ✅ | ✅ | ✅ |
+| Form filling | ✅ | ✅ | ⚠️ Limited |
+| Merge / split | ✅ | ❌ Paid version only | ⚠️ Manual |
+| Page reorder, rotate, delete | ✅ | ❌ Paid version only | ✅ |
+| Encryption & permissions | ✅ | ❌ Paid version only | ✅ On export |
+| Compression | ✅ | ❌ Paid version only | ⚠️ On export |
+| True physical redaction | ✅ | ❌ Paid version only | ✅ |
+| Watermark removal | ✅ | ❌ | ❌ |
+| PDF → Word / Excel / PowerPoint | ✅ *(Python runtime required for Word & PPT)* | ❌ Paid version only | ❌ |
+| Document layout preservation | ✅ | ✅ | ⚠️ Opens as vector drawing, layout may drift |
 
 ---
 
