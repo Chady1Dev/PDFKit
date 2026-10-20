@@ -11,12 +11,12 @@
   <a href="README.md">Türkçe</a> &nbsp;•&nbsp; <b>English</b>
 </p>
 
-[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/cagdass1128/PDFKit)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2.0-FFC131?style=for-the-badge&logo=tauri&logoColor=black)](https://tauri.app/)
 [![Rust Core](https://img.shields.io/badge/Rust-2021%20Edition-DEA584?style=for-the-badge&logo=rust&logoColor=black)](https://www.rust-lang.org/)
 [![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
-[![Zero Network](https://img.shields.io/badge/Security-Zero--Network%20(Offline)-2ea44f?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/cagdass1128/PDFKit)
-[![Corporate Deployment](https://img.shields.io/badge/Enterprise-MSI%20%26%20GPO%20Ready-blueviolet?style=for-the-badge&logo=windows-terminal&logoColor=white)](https://github.com/cagdass1128/PDFKit)
+[![Zero Network](https://img.shields.io/badge/Security-Zero--Network%20(Offline)-2ea44f?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
+[![Corporate Deployment](https://img.shields.io/badge/Enterprise-MSI%20%26%20GPO%20Ready-blueviolet?style=for-the-badge&logo=windows-terminal&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
 [![License: AGPL v3](https://img.shields.io/badge/License-GNU%20AGPL%20v3.0-blue?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
 
 <br/>
@@ -25,8 +25,8 @@
 
 <br/>
 
-[📥 Windows Installer (.exe)](https://github.com/cagdass1128/PDFKit/releases) • 
-[🏢 Enterprise Package (.msi)](https://github.com/cagdass1128/PDFKit/releases) • 
+[📥 Windows Installer (.exe)](https://github.com/Chady1Dev/PDFKit/releases) • 
+[🏢 Enterprise Package (.msi)](https://github.com/Chady1Dev/PDFKit/releases) • 
 [📖 Technical Documentation](DOCUMENTATION.md)
 
 </div>
@@ -129,7 +129,7 @@ msiexec.exe /x "PDFkit_0.1.0_x64_en-US.msi" /qn /norestart
 ## 📄 License
 This software is distributed under the **[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)**.
 
-Copyright (c) 2026 Çağdaş Polat ([github.com/cagdass1128](https://github.com/cagdass1128))
+Copyright (c) 2026 Çağdaş Polat ([github.com/Chady1Dev](https://github.com/Chady1Dev))
 
 * Individuals and enterprises may use PDFkit for internal workflows **completely free and without restrictions**.
 * See the [LICENSE](LICENSE) file for terms and conditions.

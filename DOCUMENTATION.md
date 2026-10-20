@@ -113,7 +113,7 @@ py -m pip install --no-index --find-links .\wheels pymupdf pdf2docx python-docx 
 ### 3.2. Komutlar
 
 ```bash
-git clone https://github.com/cagdass1128/PDFKit.git
+git clone https://github.com/Chady1Dev/PDFKit.git
 cd PDFKit
 npm install
 

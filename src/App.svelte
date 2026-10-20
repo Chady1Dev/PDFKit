@@ -281,7 +281,7 @@
         </button>
 
         <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden w-max rounded-md bg-zinc-900 px-2.5 py-1.5 text-[11px] font-medium text-zinc-100 shadow-xl ring-1 ring-zinc-700/60 group-hover:flex items-center gap-1 z-50 dark:bg-zinc-800 dark:text-zinc-200">
-          <span>Copyright (c) 2026 github.com/cagdass1128</span>
+          <span>Copyright (c) 2026 github.com/Chady1Dev</span>
           <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 bg-zinc-900 dark:bg-zinc-800"></div>
         </div>
       </div>
