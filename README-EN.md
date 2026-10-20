@@ -5,46 +5,38 @@
 </p>
 
 # PDFkit
-### Ultra-Lightweight, Local-First, Zero-Network PDF Workstation for Windows
+### Ultra-Lightweight, Independent, Zero-Network Desktop PDF Workstation
 
 <p align="center">
   <a href="README.md">Türkçe</a> &nbsp;•&nbsp; <b>English</b>
 </p>
 
-[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
-[![Tauri v2](https://img.shields.io/badge/Tauri-v2.0-FFC131?style=for-the-badge&logo=tauri&logoColor=black)](https://tauri.app/)
-[![Rust Core](https://img.shields.io/badge/Rust-2021%20Edition-DEA584?style=for-the-badge&logo=rust&logoColor=black)](https://www.rust-lang.org/)
-[![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?style=for-the-badge&logo=svelte&logoColor=white)](https://svelte.dev/)
-[![Zero Network](https://img.shields.io/badge/Security-Zero--Network%20(Offline)-2ea44f?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
-[![Corporate Deployment](https://img.shields.io/badge/Enterprise-MSI%20%26%20GPO%20Ready-blueviolet?style=for-the-badge&logo=windows-terminal&logoColor=white)](https://github.com/Chady1Dev/PDFKit)
-[![License: AGPL v3](https://img.shields.io/badge/License-GNU%20AGPL%20v3.0-blue?style=for-the-badge&logo=gnu&logoColor=white)](LICENSE)
-
 <br/>
 
-> **"Your documents never leave your machine. No subscription, no telemetry, in a 4.15 MB ultra-compact installer."**
+> **"For the best results and improved document conversion, please ensure you are using the latest version of the application. Our PDF to Word, Excel, and PowerPoint conversion engine will be updated regularly."**
 
 <br/>
 
 [📥 Windows Installer (.exe)](https://github.com/Chady1Dev/PDFKit/releases) • 
-[🏢 Enterprise Package (.msi)](https://github.com/Chady1Dev/PDFKit/releases) • 
+[🏢 Enterprise Deployment Package (.msi)](https://github.com/Chady1Dev/PDFKit/releases) • 
 [📖 Technical Documentation](DOCUMENTATION.md)
 
 </div>
 
 ---
 
-> 📌 **Important Note:** For optimal results, please ensure you are using the latest version. Our PDF to Word, Excel, and PowerPoint conversion engine is continuously updated and improved.
+> 📌 **Important Note:** For optimal results, please ensure you are using the latest version of the application. Our PDF to Word, Excel, and PowerPoint conversion engine is continuously updated and improved.
 
 ---
 
 ## 💡 Why PDFkit?
 
-Modern knowledge workers and organizations are typically forced to choose between two problematic options:
+In everyday document workflows, users are typically forced to choose between two compromises:
 
-1. **Online Web Converters (iLovePDF, Smallpdf, etc.):** Files are uploaded to third-party servers. Sensitive contracts, intellectual property, or exam papers leak outside your perimeter—introducing severe **GDPR and data compliance risks**, alongside file size quotas and subscription walls.
-2. **Traditional Desktop Giants (Adobe Acrobat Pro, Foxit, etc.):** Bulky 500 MB+ installations, dozens of background telemetry and update services, high idle memory consumption, and costly recurring licenses.
+1. **Online PDF Tools (iLovePDF, Smallpdf, etc.):** Files are uploaded to third-party servers. Personal data, trade secrets, or exam papers leave your computer—introducing severe risks under **KVKK and GDPR**. They also impose file limits, queues, and paid subscription paywalls.
+2. **Traditional Desktop Giants (Adobe Acrobat Pro, etc.):** Take up hundreds of megabytes of disk space, run dozens of background telemetry and update daemons, and demand steep annual recurring license fees.
 
-**PDFkit** is a private, lightweight, and independent PDF workstation built on **Tauri v2 + Rust**. It lets you organize pages, purge watermarks, redact sensitive data down to the byte level, and convert documents to Office formats—**100% offline and free forever.**
+**PDFkit** is a **completely local, secure, independent, and free** PDF workstation that lets you edit, organize pages, remove watermarks intelligently, redact content physically, and convert documents to Office formats—without files ever leaving your machine.
 
 ---
 
@@ -61,17 +53,17 @@ Modern knowledge workers and organizations are typically forced to choose betwee
 
 ### What Can I Do?
 
-| Feature / Action | **PDFkit** | **Adobe Acrobat Reader** | **LibreOffice Draw** |
+| Action | **PDFkit** | **Adobe Acrobat Reader** | **LibreOffice Draw** |
 | :--- | :---: | :---: | :---: |
 | Annotate, highlight, sign | ✅ | ✅ | ✅ |
 | Form filling | ✅ | ✅ | ⚠️ Limited |
 | Merge / split | ✅ | ❌ Paid version only | ⚠️ Manual |
 | Page reorder, rotate, delete | ✅ | ❌ Paid version only | ✅ |
-| Encryption & permissions | ✅ | ❌ Paid version only | ✅ On export |
+| Encryption and permissions | ✅ | ❌ Paid version only | ✅ On export |
 | Compression | ✅ | ❌ Paid version only | ⚠️ On export |
 | True physical redaction | ✅ | ❌ Paid version only | ⚠️ Flattens entire doc to raster images |
 | Watermark removal | ✅ | ❌ | ❌ |
-| PDF → Word / Excel / PowerPoint | ✅ *(Python runtime required for Word & PPT)* | ❌ Paid version only | ❌ |
+| PDF → Word / Excel / PowerPoint | ✅ *(Python required for Word and PPTx)* | ❌ Paid version only | ❌ |
 | Document layout preservation | ✅ | ✅ | ⚠️ Opens as vector drawing, layout may drift |
 
 ---
@@ -79,71 +71,72 @@ Modern knowledge workers and organizations are typically forced to choose betwee
 ## ✨ Key Features
 
 ### 🛡️ 1. Zero-Network Security Model
-Compiled with a strict Content Security Policy (CSP). PDFkit cannot initiate HTTP or WebSocket requests. There are no analytics, no background update daemons, and zero external telemetry.
+The application is compiled with a strict Content Security Policy (CSP). It cannot initiate external HTTP/WebSocket requests, and contains zero telemetry, analytics, or hidden background services.
 
-### 🪓 2. True Physical Redaction
-Conventional tools simply draw black rectangles over confidential text, leaving the underlying text selectable and copyable. PDFkit re-renders redacted pages and **permanently purges the original text objects, fonts, and bounding boxes from the file stream.** The redacted data is irrecoverable.
+### 🪓 2. Permanent and Physical Redaction
+Conventional tools merely draw a black rectangle over sensitive text; the underlying text can still be selected and copied. In PDFkit, when saving a redacted page, the **original text, font glyphs, and character bytecode are permanently stripped from the file stream.** The information can never be recovered.
 
-### 🎯 3. Intelligent Watermark Stripping
-Easily eliminate invasive diagonal and background watermarks from lecture notes, exam booklets, or draft memos. Target headers, footers, or central page bodies independently with one click.
+### 🎯 3. Intelligent Watermark Removal
+Removes intrusive diagonal or transparent watermarks from university course notes, open university exam papers, and official draft documents in a single click without disturbing content flow. Header, body, and footer zones can be targeted independently.
 
-### 📄 4. High-Fidelity Office Export (Word / PowerPoint / Excel / TXT)
-Automatic multi-column flow detection, table reconstruction heuristics, and full Unicode Turkish character support. Complex documents are parsed in seconds instead of minutes.
+### 📄 4. Office Conversion (Word / PowerPoint / Excel / TXT)
+Dual-column text flow heuristics, advanced table reconstruction, and full Unicode Turkish character support. Documents with complex tables are parsed into Word or Excel in seconds instead of minutes.
 
-### 🖋️ 5. Comprehensive Utility Suite
-- **Page Operations:** Drag-and-drop page reordering, splitting, merging, rotating, and deleting.
-- **Form Filling:** Native AcroForm field detection with robust UTF-8 and Turkish character encoding.
-- **Security & Permissions:** AES-256 encryption with granular printing, copying, and modification flags.
-- **Compression:** Lossless and balanced profile presets for optimized archiving.
-- **Direct Printing:** Hardware-accelerated direct printing through native Windows spoolers.
+### 🖋️ 5. Practical Editing & Page Tools
+- **Page Management:** Drag-and-drop page reordering, rotating, deleting, splitting, and merging.
+- **Content Editing:** Add text, shapes, highlights, and handwritten signatures.
+- **Form Filling:** Detect AcroForm fields and fill them out with full Turkish character support.
+- **Security:** AES-256 encryption; restrict printing, copying, and modification permissions.
+- **Compression:** Lossless and balanced compression profiles.
+- **Direct Printing:** Hardware-accelerated direct communication with Windows printer drivers.
 
 ---
 
 ## 📦 Optional Python Runtime for Office Conversion
 
-All native PDF editing, redaction, watermarking, and page management features run **with zero dependencies**. For high-fidelity Word and PowerPoint export, having Python on your system is recommended:
+All core features of PDFkit (editing, redaction, page management, watermarking, forms) work **with zero additional setup or dependencies.** Having Python installed is recommended for high-fidelity Word and PowerPoint export:
 
 ```powershell
 # 1. Install Python (or download from python.org)
 winget install -e --id Python.Python.3.13
 
-# 2. Install conversion modules
+# 2. Install required open-source libraries
 py -m pip install pymupdf pdf2docx python-docx python-pptx xlsxwriter
 ```
 
-For more details, consult [DOCUMENTATION.md](DOCUMENTATION.md).
+For detailed guidance, refer to [DOCUMENTATION.md](DOCUMENTATION.md).
 
 ---
 
 ## 🏢 Enterprise Deployment (IT & Sysadmins)
 
-PDFkit is ready for automated corporate rollouts via Active Directory (GPO), Microsoft Intune, SCCM, or PDQ Deploy.
+PDFkit is delivered as an `.msi` package ready for centralized deployment via Active Directory (GPO), Microsoft Intune, SCCM, or PDQ Deploy.
 
 ```powershell
 # Silent unattended installation
-msiexec.exe /i "PDFkit_0.1.0_x64_en-US.msi" /qn /norestart
+msiexec.exe /i "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 
 # Silent uninstall
-msiexec.exe /x "PDFkit_0.1.0_x64_en-US.msi" /qn /norestart
+msiexec.exe /x "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 ```
-
+> 📌 **Important Note:** For optimal results, please ensure you are using the latest version of the application. Our PDF to Word, Excel, and PowerPoint conversion engine is continuously updated and improved.
 ---
 
 ## 🔒 Windows SmartScreen Notice
 
-> PDFkit is an independent open-source project. Because it is not packaged with an enterprise-paid code signing certificate, Windows SmartScreen may present an *"Unknown Publisher"* prompt during initial execution.
+> PDFkit is an independent and open-source project. Because it is not packaged with an expensive corporate code-signing certificate, Windows SmartScreen may show an *"Unknown Publisher"* warning on first launch.
 >
-> The software is fully auditable and 100% offline. You can safely proceed by selecting **"More info" → "Run anyway"**.
+> The application contains zero telemetry and the entire source code is open for inspection. You can proceed safely by clicking **"More info" → "Run anyway"**.
 
 ---
 
 ## 📄 License
-This software is distributed under the **[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)**.
+This project is licensed under the **[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)**.
 
 Copyright (c) 2026 Çağdaş Polat ([github.com/Chady1Dev](https://github.com/Chady1Dev))
 
-* Individuals and enterprises may use PDFkit for internal workflows **completely free and without restrictions**.
-* See the [LICENSE](LICENSE) file for terms and conditions.
+* Individuals and organizations may use PDFkit for commercial or internal workflows **completely free and without restriction**.
+* For further details, please review the [LICENSE](LICENSE) file.
 
 ---
 
