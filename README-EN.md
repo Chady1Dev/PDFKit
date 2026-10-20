@@ -69,7 +69,7 @@ Modern knowledge workers and organizations are typically forced to choose betwee
 | Page reorder, rotate, delete | ✅ | ❌ Paid version only | ✅ |
 | Encryption & permissions | ✅ | ❌ Paid version only | ✅ On export |
 | Compression | ✅ | ❌ Paid version only | ⚠️ On export |
-| True physical redaction | ✅ | ❌ Paid version only | ✅ |
+| True physical redaction | ✅ | ❌ Paid version only | ⚠️ Flattens entire doc to raster images |
 | Watermark removal | ✅ | ❌ | ❌ |
 | PDF → Word / Excel / PowerPoint | ✅ *(Python runtime required for Word & PPT)* | ❌ Paid version only | ❌ |
 | Document layout preservation | ✅ | ✅ | ⚠️ Opens as vector drawing, layout may drift |
