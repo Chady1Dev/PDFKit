@@ -11,3 +11,4 @@ src-tauri/gen
 Thumbs.db
 __pycache__/
 *.pyc
+*.exe

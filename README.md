@@ -1,7 +1,15 @@
 <div align="center">
 
-# 📑 PDFkit
+<p align="center">
+  <img src="public/logo.png" width="130" alt="PDFkit Logo" />
+</p>
+
+# PDFkit
 ### Ultra-Hafif, Bağımsız, Sıfır-Ağ (Zero-Network) Masaüstü PDF İstasyonu
+
+<p align="center">
+  <b>Türkçe</b> &nbsp;•&nbsp; <a href="README-EN.md">English</a>
+</p>
 
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/cagdass1128/PDFKit)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2.0-FFC131?style=for-the-badge&logo=tauri&logoColor=black)](https://tauri.app/)
@@ -13,7 +21,7 @@
 
 <br/>
 
-> **"Belgeleriniz bilgisayarınızdan hiç çıkmaz. Abonelik yok, telemetri yok, ~4 MB'lık kurulum."**
+> **"Belgeleriniz bilgisayarınızdan hiç çıkmaz. Abonelik yok, telemetri yok, 4.15 MB'lık ultra-hafif kurulum."**
 
 <br/>
 
@@ -25,81 +33,87 @@
 
 ---
 
-## 💡 Neden PDFkit?
-
-Belge iş akışında genellikle iki seçenek vardır ve ikisinin de bedeli vardır:
-
-1. **Online PDF araçları** belgeleri üçüncü taraf sunuculara yükler. Kişisel veriler, sözleşmeler ve ticari bilgiler kurum dışına çıkar; bu da **KVKK / GDPR** açısından risk oluşturur.
-2. **Geleneksel masaüstü PDF yazılımları** yüksek disk alanı kaplar, arka planda güncelleme ve lisans servisleri çalıştırır ve kullanıcı başına yıllık abonelik ister.
-
-**PDFkit**, belgeleri bilgisayar dışına çıkarmadan; düzenleme, filigran temizleme, kalıcı sansürleme, şifreleme ve Office dönüşümü yapan **yerel, ücretsiz ve açık kaynak** bir alternatiftir.
+> 📌 **Önemli Not:** En iyi sonuç için lütfen uygulamanın en güncel sürümünü kullanın. PDF'ten Word, Excel ve PowerPoint'e dönüştürme motorumuz düzenli olarak güncellenip iyileştirilmektedir.
 
 ---
 
-## ⚡ Karşılaştırma
+## 💡 Neden PDFkit?
 
-| Kriter | Geleneksel Masaüstü PDF Yazılımları | Online PDF Araçları | 📑 PDFkit |
+Günlük belge işlemlerinde genellikle iki seçenek arasında kalınır:
+
+1. **Online PDF Araçları (iLovePDF, Smallpdf vb.):** Belgeleri yabancı sunuculara yükler. Kişisel veriler, ticari sırlar veya sınav belgeleri internete çıkar; **KVKK ve GDPR** açısından ciddi risk taşır. Ayrıca dosya sınırı ve kota koyarak abonelik ister.
+2. **Geleneksel Masaüstü Devleri (Adobe Acrobat Pro vb.):** Yüzlerce megabayt disk alanı kaplar, arka planda onlarca telemetri ve güncelleme servisi çalıştırır ve yıllık fahiş lisans ücretleri talep eder.
+
+**PDFkit**, belgeleri bilgisayarınızın dışına çıkarmadan; düzenleme, sayfa yönetimi, akıllı filigran silme, fiziksel sansürleme ve Office formatlarına dönüşüm sağlayan **tamamen yerel, güvenli, bağımsız ve ücretsiz** bir PDF çalışma istasyonudur.
+
+---
+
+## ⚡ Karşılaştırma Tablosu
+
+| Özellik / Kriter | 📑 **PDFkit** | 🔴 **Adobe Acrobat Reader** | 📄 **LibreOffice (Draw)** |
 | :--- | :---: | :---: | :---: |
-| **Maliyet** | Yıllık abonelik | Kotalı / aylık ücret | **Ücretsiz & açık kaynak** |
-| **Kurulum boyutu** | Yüzlerce MB – birkaç GB | Kurulumsuz (tarayıcı) | **~4 MB (installer)** |
-| **Veri gizliliği** | Bulut senkronizasyonu / telemetri | Dosyalar sunucuya yüklenir | **%100 yerel, ağ erişimi yok** |
-| **Arka plan servisleri** | Güncelleme / lisans servisleri | — | **Yok** |
-| **Kalıcı sansürleme** | Genellikle ücretli sürümde | Güvenilir değil | **Orijinal metin dosyadan silinir** |
-| **Filigran temizleme** | Manuel | Sınırlı | **Tek tıkla, bölge seçimli** |
-| **Kurumsal dağıtım** | Lisans altyapısı gerektirebilir | Yok | **MSI + GPO / Intune** |
+| **Kurulum Boyutu** | **`4.15 MB`** *(Tek tıkla hazır)* | ~`350 – 500 MB` | ~`300 – 450 MB` |
+| **Açılış Hızı** | **`< 0.3 saniye`** *(Anında)* | 2.5 – 5.0 saniye | 3.0 – 6.0 saniye |
+| **Boşta RAM Tüketimi** | **`~35 MB`** *(Tauri v2 + Rust)* | 350 – 500 MB+ | 250 – 400 MB |
+| **Gizlilik & Ağ İletişimi** | **%100 Çevrimdışı (0 KB Veri)** | Arka plan bulut servisleri | Yerel (telemetri opsiyonlu) |
+| **PDF Sayfa Yönetimi** | Sırala, ayır, birleştir, döndür, sil | Ücretli abonelik ($239/yıl) | Sayfaları çizim nesnesine bozar |
+| **Kalıcı / Fiziksel Sansürleme** | **Var** *(Metin dosyadan tamamen silinir)* | Sadece ücretli Pro sürümde | Yok *(Üstüne çizilen kutu kaldırılabilir)* |
+| **Akıllı Filigran Silme** | **Tek Tıkla Bölge Analizi (Başlık/Gövde/Dipnot)** | Yok *(Manuel uğraş)* | Yok *(Her harf ayrı vektör nesnesi olur)* |
+| **Kurumsal Dağıtım (GPO)** | **`5.78 MB MSI`** paketi hazır | Hantal MSI paketleri | Büyük MSI paketi |
+| **Windows Optimizasyonu** | Yerel Windows yazdırma ve GDI motoru ile derin entegrasyon | Çapraz platform ağırlığı | Ağır VCL çalışma zamanı |
 
 ---
 
 ## ✨ Öne Çıkan Özellikler
 
-### 🛡️ 1. Sıfır Ağ İletişimi
-Uygulama katı bir **İçerik Güvenlik Politikası (CSP)** ile derlenir; dışarıya HTTP/WebSocket isteği atamaz. Güncelleme servisi, telemetri veya hesap sistemi yoktur. Tüm işlemler yerelde yapılır.
+### 🛡️ 1. Sıfır Ağ İletişimi (Zero-Network)
+Uygulama katı bir İçerik Güvenlik Politikası (CSP) ile derlenmiştir. Dışarıya hiçbir HTTP/WebSocket isteği atamaz; telemetri, veri toplama veya gizli arka plan servisleri barındırmaz.
 
-### 🪓 2. Kalıcı Sansürleme
-Basit araçlar metnin üstüne siyah kutu çizer; alttaki metin seçilip kopyalanabilir. PDFkit'te sansür içeren sayfa kaydedilirken görüntüye dönüştürülür ve **orijinal metin, font ve açıklama nesneleri dosyadan tamamen silinir.** Sansürlenen bilgi geri getirilemez.
+### 🪓 2. Kalıcı ve Fiziksel Sansürleme (Redaction)
+Geleneksel araçlar metnin üstünü sadece siyah bir kutuyla örter; altındaki yazı kopyalanabilir. PDFkit'te sansür uygulanan sayfadaki **orijinal metin, yazı tipi ve karakter baytları dosyadan kalıcı olarak silinir.** Bilgi asla geri döndürülemez.
 
 ### 🎯 3. Akıllı Filigran Temizleme
-Ders notları, sınav kitapçıkları ve taslak belgelerdeki çapraz/şeffaf filigranları içerik akışını analiz ederek temizler. Üst, alt ve gövde bölgeleri ayrı ayrı seçilebilir.
+Üniversite ders notları, açıköğretim sınav soruları ve resmi taslak evraklardaki şeffaf veya çapraz filigranları içerik akışını bozmadan tek tıkla temizler. Üst bilgi, gövde ve alt bilgi bölgeleri seçilerek temizlik yapılabilir.
 
 ### 📄 4. Office Dönüşümü (Word / PowerPoint / Excel / TXT)
-İki sütunlu düzen algılama, tablo yeniden inşası ve Türkçe karakter desteği. Tablo işlemleri için geliştirilen hücre önbelleği sayesinde ağır tablolu belgeler dakikalar yerine saniyeler içinde dönüştürülür.
+Çift sütunlu metin algılama, gelişmiş tablo yapılandırması ve tam Türkçe karakter desteği. Ağır tablolu belgeler dakikalar yerine saniyeler içinde Word veya Excel'e dönüştürülür.
 
-### 🖋️ 5. Diğer Araçlar
-- **Düzenleme:** Metin, şekil, vurgulama, imza çizimi ve görsel ekleme
-- **Formlar:** AcroForm alanlarını doldurma (Türkçe karakter uyumlu)
-- **Sayfa yönetimi:** Birleştirme, ayırma, döndürme, sıralama, silme
-- **Güvenlik:** AES-256 şifreleme, yazdırma/kopyalama/düzenleme izin kısıtlama
-- **Sıkıştırma:** Kayıpsız, dengeli ve maksimum seviyeler
-- **Yazdırma:** Windows yazıcılarına doğrudan baskı
+### 🖋️ 5. Pratik Düzenleme ve Sayfa Araçları
+- **Sayfa Yönetimi:** Sayfaları sürükle-bırak yöntemiyle sıralama, döndürme, silme, bölme ve birleştirme.
+- **İçerik Düzenleme:** Metin, şekil, vurgulama ve el yazısı imza ekleme.
+- **Form Doldurma:** AcroForm alanlarını algılama ve Türkçe karakter desteğiyle doldurma.
+- **Güvenlik:** AES-256 şifreleme; yazdırma, kopyalama ve düzenleme izinlerini kısıtlama.
+- **Sıkıştırma:** Kayıpsız veya dengeli sıkıştırma profilleri.
+- **Doğrudan Yazdırma:** Windows yazıcı sürücüleriyle doğrudan iletişim.
 
 ---
 
 ## 📦 Office Dönüşümü İçin Python (İsteğe Bağlı)
 
-Office dönüşümü dışındaki tüm özellikler **ek bir kurulum gerektirmez.** Word ve PowerPoint dönüşümü için bilgisayarda Python bulunmalıdır (Excel ve TXT, Python olmadan da basit modda çalışır):
+PDFkit'in tüm temel özellikleri (düzenleme, sansür, sayfa araçları, filigran, formlar) **hiçbir ek kurulum gerektirmeden** çalışır. Word ve PowerPoint dönüşümleri için bilgisayarınızda Python bulunması önerilir:
 
 ```powershell
-# 1. Python'u kurun (veya python.org adresinden indirin)
+# 1. Python'u kurun (veya python.org adresinden edinin)
 winget install -e --id Python.Python.3.13
 
-# 2. Dönüştürme kütüphanelerini kurun
+# 2. Gerekli açık kaynak kütüphaneleri yükleyin
 py -m pip install pymupdf pdf2docx python-docx python-pptx xlsxwriter
 ```
 
-Kurulumdan sonra dönüştürme işlemleri de tamamen çevrimdışı çalışır. Detaylar için [DOCUMENTATION.md](DOCUMENTATION.md#2-sistem-gereksinimleri).
+Detaylı bilgi için [DOCUMENTATION.md](DOCUMENTATION.md) dosyasına göz atabilirsiniz.
 
 ---
 
 ## 🏢 Kurumsal Dağıtım (IT & Sistem Yöneticileri)
 
-PDFkit; Active Directory (GPO), Microsoft Intune, SCCM veya PDQ Deploy ile merkezi dağıtım için `.msi` paketi olarak sunulur.
+PDFkit; Active Directory (GPO), Microsoft Intune, SCCM veya PDQ Deploy ile merkezi dağıtım için hazır imzalanabilir `.msi` paketi olarak sunulur.
 
 ```powershell
-# Sessiz kurulum
-msiexec.exe /i "PDFkit_0.1.0_x64_en-US.msi" /qn /norestart
+# Sessiz (Silent) Kurulum
+msiexec.exe /i "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 
-# Sessiz kaldırma
-msiexec.exe /x "PDFkit_0.1.0_x64_en-US.msi" /qn /norestart
+# Sessiz Kaldırma
+msiexec.exe /x "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 ```
 
 ---
@@ -108,7 +122,7 @@ msiexec.exe /x "PDFkit_0.1.0_x64_en-US.msi" /qn /norestart
 
 > PDFkit bağımsız ve açık kaynaklı bir projedir. Ticari kod imzalama sertifikası bulunmadığı için Windows SmartScreen ilk çalıştırmada *"Bilinmeyen Yayıncı"* uyarısı gösterebilir.
 >
-> Uygulama telemetri içermez ve kaynak kodu tamamen incelenebilir. Kurulum ekranında **"Ek Bilgi" → "Yine de Çalıştır"** seçeneğiyle devam edebilirsiniz.
+> Uygulama hiçbir telemetri içermez ve tüm kaynak kodu açıktır. Kurulum ekranında **"Ek Bilgi" → "Yine de Çalıştır"** seçeneğiyle güvenle ilerleyebilirsiniz.
 
 ---
 
@@ -117,9 +131,8 @@ Bu proje **[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)** ile li
 
 Copyright (c) 2026 Çağdaş Polat ([github.com/cagdass1128](https://github.com/cagdass1128))
 
-* Bireyler ve kurumlar PDFkit'i ticari veya kurum içi süreçlerde **ücretsiz ve sınırsız** kullanabilir.
-* AGPL-3.0 gereğince değiştirilmiş sürümlerin kaynak kodu da açık tutulmalıdır.
-* Detaylar için [LICENSE](LICENSE) dosyasına bakabilirsiniz.
+* Bireysel kullanıcılar ve kurumlar PDFkit'i ticari veya kurum içi süreçlerde **ücretsiz ve sınırsız** kullanabilir.
+* Detaylar için [LICENSE](LICENSE) belgesini inceleyebilirsiniz.
 
 ---
 

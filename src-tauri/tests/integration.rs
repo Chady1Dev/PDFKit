@@ -618,7 +618,7 @@ fn write_and_stamp_binary() {
 
 #[test]
 fn form_fields_detection_and_filling() {
-    let sample_path = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\interactiveform_enabled.pdf");
+    let sample_path = std::path::Path::new("tests/fixtures/sample.pdf");
     if !sample_path.exists() {
         return;
     }
@@ -674,8 +674,8 @@ fn form_fields_detection_and_filling() {
 
 #[test]
 fn test_turkish_acroform_encoding() {
-    let p1 = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\interactiveform_enabled.pdf");
-    let p2 = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\pdfKit.pdf");
+    let p1 = std::path::Path::new("tests/fixtures/sample.pdf");
+    let p2 = std::path::Path::new("tests/fixtures/sample.pdf");
     let sample_path = if p1.exists() {
         p1
     } else if p2.exists() {
@@ -704,7 +704,7 @@ fn test_turkish_acroform_encoding() {
     assert!(out.exists());
 
     // Also write to pdfKit_updated.pdf on desktop for direct inspection and comparison
-    let updated_desktop = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\pdfKit_updated.pdf");
+    let updated_desktop = ws.join("inspected_updated.pdf");
     let _ = run(commands::forms::fill_form(
         sample_path.to_string_lossy().into_owned(),
         updated_desktop.to_string_lossy().into_owned(),
@@ -1104,7 +1104,7 @@ fn test_unified_watermark_layer_selective_zone_removal() {
 
 #[test]
 fn test_real_aof_exam_file_zoning() {
-    let real_path = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\ai-Aöf 2026 YAZ OKULU\KARAR MODELLERİ - YBS403U\Dönem Sonu 2025-2026.pdf");
+    let real_path = std::path::Path::new("tests/fixtures/sample.pdf");
     if !real_path.exists() {
         return;
     }
@@ -1321,7 +1321,7 @@ fn test_page_numbers_preserve_existing_fonts() {
 
 #[test]
 fn test_inspect_real_exam_page_number() {
-    let p = std::path::Path::new(r"C:\Users\CAGDASS\Desktop\ai-Aöf 2026 YAZ OKULU\KARAR MODELLERİ - YBS403U\Dönem Sonu 2025-2026.pdf");
+    let p = std::path::Path::new("tests/fixtures/sample.pdf");
     if !p.exists() { return; }
 
     let ws = workspace("clean_exam_page_numbers");
