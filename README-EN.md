@@ -50,15 +50,15 @@ Modern knowledge workers and organizations are typically forced to choose betwee
 
 ## ⚡ Comparison
 
-| Feature / Metric | 📑 **PDFkit** | 🔴 **Adobe Acrobat (Pro / Reader)** | 📄 **LibreOffice (Draw)** |
+| Feature / Metric | 📑 **PDFkit** | 🔴 **Adobe Acrobat Pro** | 📄 **LibreOffice (Draw)** |
 | :--- | :---: | :---: | :---: |
-| **Cost / License** | **100% Free & Open Source** | **$239.88 / year** *(Features locked in free Reader)* | Free & Open Source |
+| **Cost / License** | **100% Free & Open Source** | **Paid Subscription** | Free & Open Source |
 | **Installer Size** | **`4.15 MB`** *(Instant setup)* | ~`350 – 500 MB` | ~`300 – 450 MB` |
 | **Startup Time** | **`< 0.3 sec`** *(Instantaneous)* | 2.5 – 5.0 sec | 3.0 – 6.0 sec |
 | **Idle RAM Usage** | **`~35 MB`** *(Rust core)* | 350 – 500 MB+ | 250 – 400 MB |
 | **Privacy & Network** | **100% Offline (0 KB Data)** | Background cloud telemetry | Local (optional telemetry) |
-| **Page Organization** | Reorder, merge, split, rotate, delete | Requires Pro subscription (Locked in Reader) | Breaks layouts into vector shapes |
-| **Physical Redaction** | **Yes** *(Text bytecode permanently removed)* | Only in paid Acrobat Pro | No *(Overlay boxes can be deleted)* |
+| **Page Organization** | Reorder, merge, split, rotate, delete | Available | Breaks layouts into vector shapes |
+| **Physical Redaction** | **Yes** *(Text bytecode permanently removed)* | Available | No *(Overlay boxes can be deleted)* |
 | **Smart Watermark Removal** | **One-Click Zone Analysis (Header/Body/Footer)** | No *(Tedious manual editing)* | No *(Each letter becomes a shape)* |
 | **Enterprise Deployment** | **`5.78 MB MSI`** ready for GPO | Complex bulky MSI transforms | Large MSI package |
 | **Windows Optimization** | Deep native integration with Windows Print Spooler and GDI | Cross-platform bloat | Heavy VCL runtime overhead |
