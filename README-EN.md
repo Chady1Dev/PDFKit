@@ -34,7 +34,7 @@
 In everyday document workflows, users are typically forced to choose between two compromises:
 
 1. **Online PDF Tools (iLovePDF, Smallpdf, etc.):** Files are uploaded to third-party servers. Personal data, trade secrets, or exam papers leave your computer—introducing severe risks under **KVKK and GDPR**. They also impose file limits, queues, and paid subscription paywalls.
-2. **Traditional Desktop Giants (Adobe Acrobat Pro, etc.):** Take up hundreds of megabytes of disk space, run dozens of background telemetry and update daemons, and demand steep annual recurring license fees.
+2. **Traditional Desktop Giants (Adobe Acrobat Pro, etc.):** Take up hundreds of megabytes of disk space, run dozens of background telemetry and update daemons, and demand annual recurring license fees.
 
 **PDFkit** is a **completely local, secure, independent, and free** PDF workstation that lets you edit, organize pages, remove watermarks intelligently, redact content physically, and convert documents to Office formats—without files ever leaving your machine.
 
@@ -48,7 +48,8 @@ In everyday document workflows, users are typically forced to choose between two
 | :--- | :---: | :---: | :---: |
 | **License** | Free & open source | Free, proprietary | Free & open source |
 | **Platform** | Windows | Windows, macOS, Mobile | Windows, macOS, Linux |
-| **Installer Size** | **4.15 MB** | Hundreds of MB | ~350 MB *(bundled with office suite)* |
+| **Installed Size** | **14 MB** | ~1.1 GB | ~340 MB |
+| **PDF Edit - RAM Usage** | **~300 MB** | ~620 MB | ~ Froze / Not Responding |
 | **Account / Network** | Not required *(100% Offline)* | Some features require login | Not required |
 
 ### What Can I Do?
@@ -94,17 +95,7 @@ Dual-column text flow heuristics, advanced table reconstruction, and full Unicod
 
 ## 📦 Optional Python Runtime for Office Conversion
 
-All core features of PDFkit (editing, redaction, page management, watermarking, forms) work **with zero additional setup or dependencies.** Having Python installed is recommended for high-fidelity Word and PowerPoint export:
-
-```powershell
-# 1. Install Python (or download from python.org)
-winget install -e --id Python.Python.3.13
-
-# 2. Install required open-source libraries
-py -m pip install pymupdf pdf2docx python-docx python-pptx xlsxwriter
-```
-
-For detailed guidance, refer to [DOCUMENTATION.md](DOCUMENTATION.md).
+All core features of PDFkit (editing, redaction, page management, watermarking, forms) work **with zero additional setup or dependencies.** Having Python installed is recommended for high-fidelity Word and PowerPoint export.
 
 ---
 
@@ -119,6 +110,8 @@ msiexec.exe /i "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 # Silent uninstall
 msiexec.exe /x "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 ```
+For detailed guidance, refer to [DOCUMENTATION.md](DOCUMENTATION.md).
+
 > 📌 **Important Note:** For optimal results, please ensure you are using the latest version of the application. Our PDF to Word, Excel, and PowerPoint conversion engine is continuously updated and improved.
 ---
 
