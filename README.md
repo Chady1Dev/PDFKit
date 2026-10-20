@@ -21,7 +21,7 @@
 
 <br/>
 
-> **"Belgeleriniz bilgisayarınızdan hiç çıkmaz. Abonelik yok, telemetri yok, 4.15 MB'lık ultra-hafif kurulum."**
+> **"En iyi sonuç ve iyileştirilmiş belge dönüştürme için lütfen uygulamanın en güncel sürümünü kullanın.PDF'ten Word, Excel ve PowerPoint'e dönüştürme motorumuz düzenli olarak güncellenecektir."**
 
 <br/>
 
@@ -127,7 +127,7 @@ msiexec.exe /i "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 # Sessiz Kaldırma
 msiexec.exe /x "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
 ```
-
+> 📌 **Önemli Not:** En iyi sonuç için lütfen uygulamanın en güncel sürümünü kullanın. PDF'ten Word, Excel ve PowerPoint'e dönüştürme motorumuz düzenli olarak güncellenip iyileştirilmektedir.
 ---
 
 ## 🔒 Windows SmartScreen Bildirimi
