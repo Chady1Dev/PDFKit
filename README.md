@@ -63,7 +63,7 @@ Günlük belge işlemlerinde genellikle iki seçenek arasında kalınır:
 | Şifreleme ve izinler | ✅ | ❌ Ücretli sürümde | ✅ Dışa aktarırken |
 | Sıkıştırma | ✅ | ❌ Ücretli sürümde | ⚠️ Dışa aktarırken |
 | Kalıcı sansürleme | ✅ | ❌ Ücretli sürümde | ⚠️ Tüm belge resme çevrilir |
-| Filigran temizleme | ✅ | ❌ | ❌ |
+| Filigran temizleme | ✅ | ❌ Ücretli sürümde | ❌ |
 | PDF → Word / Excel / PowerPoint | ✅ *(Word ve PPTx için Python gerekir)* | ❌ Ücretli sürümde | ❌ |
 | Belge düzenini koruma | ✅ | ✅ | ⚠️ PDF çizim olarak açılır, düzen kayabilir |
 
