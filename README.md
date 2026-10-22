@@ -69,6 +69,12 @@ Günlük belge işlemlerinde genellikle iki seçenek arasında kalınır:
 
 ---
 
+## 🎬 Tanıtım Videosu
+
+https://github.com/user-attachments/assets/a4c56783-6342-4612-a137-90294922c5ff
+
+---
+
 ## ✨ Öne Çıkan Özellikler
 
 ### 🛡️ 1. Sıfır Ağ İletişimi (Zero-Network)

@@ -63,9 +63,15 @@ In everyday document workflows, users are typically forced to choose between two
 | Encryption and permissions | ✅ | ❌ Paid version only | ✅ On export |
 | Compression | ✅ | ❌ Paid version only | ⚠️ On export |
 | True physical redaction | ✅ | ❌ Paid version only | ⚠️ Flattens entire doc to raster images |
-| Watermark removal | ✅ | ❌ | ❌ |
+| Watermark removal | ✅ | ❌ Paid version only | ❌ |
 | PDF → Word / Excel / PowerPoint | ✅ *(Python required for Word and PPTx)* | ❌ Paid version only | ❌ |
 | Document layout preservation | ✅ | ✅ | ⚠️ Opens as vector drawing, layout may drift |
+
+---
+
+## 🎬 Demo Video
+
+https://github.com/user-attachments/assets/a4c56783-6342-4612-a137-90294922c5ff
 
 ---
 
