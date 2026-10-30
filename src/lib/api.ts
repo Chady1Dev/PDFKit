@@ -317,3 +317,212 @@ export const installPythonRuntime = () =>
 
 export const installPythonPackages = () =>
   invoke<string>("install_python_packages");
+
+// --- PDF Comparison API ---
+
+export type CompareMode = "auto" | "text_only" | "visual_only" | "content_structure";
+
+export type ChangeLayer = "text" | "visual" | "structure";
+
+export type ChangeCategory =
+  | "text"
+  | "formatting"
+  | "images_graphics"
+  | "annotations"
+  | "forms"
+  | "header_footer"
+  | "background"
+  | "pages";
+
+export type ChangeKind =
+  | "text_added"
+  | "text_deleted"
+  | "text_modified"
+  | "text_moved"
+  | "line_paragraph_changed"
+  | "formatting_changed"
+  | "layout_shifted"
+  | "image_added"
+  | "image_deleted"
+  | "image_modified"
+  | "image_moved"
+  | "vector_changed"
+  | "table_changed"
+  | "visual_region_diff"
+  | "annotation_added"
+  | "annotation_deleted"
+  | "annotation_modified"
+  | "form_field_added"
+  | "form_field_deleted"
+  | "form_field_modified"
+  | "header_footer_changed"
+  | "background_changed"
+  | "page_added"
+  | "page_deleted"
+  | "page_moved"
+  | "page_geometry_changed";
+
+export interface NormalizationOptions {
+  ignore_case: boolean;
+  ignore_whitespace: boolean;
+  normalize_hyphenation: boolean;
+  unicode_normalization: boolean;
+  normalize_ligatures: boolean;
+}
+
+export interface CompareOptions {
+  mode: CompareMode;
+  normalization: NormalizationOptions;
+  visual_tolerance: number;
+  ignore_antialiasing: boolean;
+  min_page_similarity: number;
+}
+
+export interface BoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface DiffChangeItem {
+  id: string;
+  layer: ChangeLayer;
+  category: ChangeCategory;
+  kind: ChangeKind;
+  left_page: number | null;
+  right_page: number | null;
+  left_rect: BoundingBox | null;
+  right_rect: BoundingBox | null;
+  title: string;
+  detail: string;
+  before_text: string | null;
+  after_text: string | null;
+  is_heuristic: boolean;
+  confidence: number;
+}
+
+export type PageMatchStatus = "identical" | "modified" | "moved" | "deleted" | "added";
+
+export interface PageAlignment {
+  left_page: number | null;
+  right_page: number | null;
+  status: PageMatchStatus;
+  similarity: number;
+  low_confidence: boolean;
+  geometry_differs: boolean;
+  is_scanned: boolean;
+  left_dimensions: [number, number] | null;
+  right_dimensions: [number, number] | null;
+  left_rotation: number;
+  right_rotation: number;
+}
+
+export interface ComparisonSummary {
+  total_changes: number;
+  text_added_count: number;
+  text_deleted_count: number;
+  text_modified_count: number;
+  text_moved_count: number;
+  formatting_changes_count: number;
+  visual_changes_count: number;
+  image_graphic_changes_count: number;
+  annotation_changes_count: number;
+  form_changes_count: number;
+  header_footer_changes_count: number;
+  background_changes_count: number;
+  pages_added_count: number;
+  pages_deleted_count: number;
+  pages_moved_count: number;
+  pages_modified_count: number;
+  pages_identical_count: number;
+  changed_left_pages: number[];
+  changed_right_pages: number[];
+}
+
+export interface EnrichedTextSpan {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  font_name?: string;
+  font_size?: number;
+}
+
+export interface EnrichedPageData {
+  page: number;
+  spans: EnrichedTextSpan[];
+}
+
+export interface ComparisonResult {
+  left_path: string;
+  right_path: string;
+  left_page_count: number;
+  right_page_count: number;
+  mode: CompareMode;
+  options: CompareOptions;
+  alignments: PageAlignment[];
+  changes: DiffChangeItem[];
+  summary: ComparisonSummary;
+  uncertainties: string[];
+  limitations: string[];
+  duration_ms: number;
+}
+
+export interface RasterCompareRequest {
+  left_page: number;
+  right_page: number;
+  left_png: number[];
+  right_png: number[];
+  left_dims_pt: [number, number];
+  right_dims_pt: [number, number];
+  tolerance: number;
+  ignore_antialiasing: boolean;
+  exclude_rects_pt: BoundingBox[];
+}
+
+export interface RasterCompareResult {
+  left_page: number;
+  right_page: number;
+  diff_ratio: number;
+  changed_pixel_count: number;
+  total_pixel_count: number;
+  geometry_compatible: boolean;
+  geometry_warning: string | null;
+  regions_pt: BoundingBox[];
+  heatmap_png: number[] | null;
+}
+
+export const comparePdfs = (
+  leftPath: string,
+  rightPath: string,
+  options?: CompareOptions | null,
+  leftEnriched?: EnrichedPageData[] | null,
+  rightEnriched?: EnrichedPageData[] | null,
+) =>
+  invoke<ComparisonResult>("compare_pdfs", {
+    leftPath,
+    rightPath,
+    options: options ?? null,
+    leftEnriched: leftEnriched ?? null,
+    rightEnriched: rightEnriched ?? null,
+  });
+
+export const comparePageRasters = (request: RasterCompareRequest) =>
+  invoke<RasterCompareResult>("compare_page_rasters", { request });
+
+export const cancelComparison = () =>
+  invoke<void>("cancel_comparison");
+
+export const exportComparisonReport = (
+  result: ComparisonResult,
+  outputPath: string,
+  format: "json" | "csv" | "html",
+) =>
+  invoke<OpResult>("export_comparison_report", {
+    result,
+    outputPath,
+    format,
+  });
+

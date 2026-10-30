@@ -5,7 +5,7 @@
   import {
     FilePlus2, Scissors, RotateCw, FileArchive, Image,
     Lock, Stamp, PenLine, Sparkles, History,
-    FileText, Clock, Trash2, X, ChevronRight,
+    FileText, Clock, Trash2, X, ChevronRight, GitCompare,
   } from "@lucide/svelte";
 
   interface ToolCard {
@@ -40,6 +40,7 @@
 
   const tools: ToolCard[] = [
     { id: "editor", title: "PDF Düzenle", description: "Doğrudan sayfa üzerinde metin, çizim, vurgu, sansür, form doldurma ve imza", icon: PenLine, phase: 1 },
+    { id: "compare", title: "PDF Karşılaştır", description: "İki PDF arasındaki metin, biçim, görsel ve sayfa yapısı farklarını yan yana tespit et", icon: GitCompare, phase: 1 },
     { id: "merge", title: "Birleştir", description: "Birden çok PDF'i tek dosyada birleştir", icon: FilePlus2, phase: 1 },
     { id: "split", title: "Ayır", description: "Sayfa aralıklarını ayrı dosyalara böl", icon: Scissors, phase: 1 },
     { id: "organize", title: "Organize Et", description: "Sayfaları döndür, sürükle-bırak ile sırala ve sil", icon: RotateCw, phase: 1 },

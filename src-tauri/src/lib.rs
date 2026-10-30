@@ -86,6 +86,10 @@ pub fn run() {
             commands::convert_office::install_python_packages,
             commands::ocr::ocr_image,
             commands::ocr::add_searchable_ocr_layer,
+            commands::compare::compare_pdfs,
+            commands::compare::compare_page_rasters,
+            commands::compare::cancel_comparison,
+            commands::compare::export_comparison_report,
         ])
 
         .run(tauri::generate_context!())

@@ -313,8 +313,8 @@
     const pageList = [...(activeDoc.annotations[activeDoc.currentPage] || [])];
     const offset = 24 * pasteOffsetCount;
 
-    const maxW = (overlayCanvas?.width || 1200) / (activeDoc.scale || 1.0);
-    const maxH = (overlayCanvas?.height || 1600) / (activeDoc.scale || 1.0);
+    const maxW = (overlayCanvas?.width || 1200) / (activeDoc.scale || 1.5);
+    const maxH = (overlayCanvas?.height || 1600) / (activeDoc.scale || 1.5);
 
     const pastedItems: Annotation[] = annotationClipboard.map((orig) => {
       const copy: Annotation = JSON.parse(JSON.stringify(orig));
@@ -435,7 +435,7 @@
         if (it.points) it.points.forEach((p) => (p.y += shiftY));
       }
     } else if (placement === "bottom") {
-      const pageH = (overlayCanvas?.height || 1000) / (activeDoc.scale || 1.0);
+      const pageH = (overlayCanvas?.height || 1000) / (activeDoc.scale || 1.5);
       let maxY = -Infinity;
       for (const it of itemsToMove) {
         const y = (it.y ?? 0) + (it.height ?? 0);
@@ -492,7 +492,7 @@
     const viewportEl = document.getElementById(`continuous-page-viewport-${page}`);
     if (!viewportEl) return null;
     const rect = viewportEl.getBoundingClientRect();
-    const s = activeDoc.scale || 1.0;
+    const s = activeDoc.scale || 1.5;
     return {
       x: (e.clientX - rect.left) / s,
       y: (e.clientY - rect.top) / s,
@@ -545,7 +545,7 @@
 
   function applyDragMove(clientX: number, clientY: number, targetPage: number) {
     if (!activeDoc || dragInitialSnapshots.length === 0) return;
-    const s = activeDoc.scale || 1.0;
+    const s = activeDoc.scale || 1.5;
 
     const sourceEl = document.getElementById(`continuous-page-viewport-${dragSourcePage}`);
     const targetEl = document.getElementById(`continuous-page-viewport-${targetPage}`);
@@ -1411,7 +1411,7 @@
 
   function resetZoom() {
     if (!activeDoc) return;
-    updateDocScale(activeDoc.id, 1.0);
+    updateDocScale(activeDoc.id, 1.5);
     showZoomMenu = false;
   }
 
@@ -3158,8 +3158,13 @@
         return;
       }
 
-      // Ctrl + 0 / Ctrl + 1 : Sayfayı ekrana sığdır / %100
-      if (e.key === "0" || e.key === "1") {
+      // Ctrl + 0 : Varsayılan zoom (%150) / Ctrl + 1 : %100
+      if (e.key === "0") {
+        e.preventDefault();
+        if (activeDoc) updateDocScale(activeDoc.id, 1.5);
+        return;
+      }
+      if (e.key === "1") {
         e.preventDefault();
         if (activeDoc) updateDocScale(activeDoc.id, 1.0);
         return;
@@ -4097,7 +4102,7 @@
             <button
               type="button"
               class="px-1.5 py-0.5 text-xs font-mono text-zinc-600 hover:text-indigo-600 dark:text-zinc-400 dark:hover:text-indigo-400 cursor-pointer active:scale-95 transition-colors font-medium"
-              title="Yakınlaştırmayı %100 yap (Varsayılana sıfırla)"
+              title="Yakınlaştırmayı varsayılana sıfırla (%150)"
               on:click={resetZoom}
             >
               %{Math.round(activeDoc.scale * 100)}

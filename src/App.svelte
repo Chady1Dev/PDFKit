@@ -9,7 +9,7 @@
   import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import {
     LayoutGrid, FilePlus2, Scissors, RotateCw, Layers, FileArchive,
-    Image, Lock, Stamp, Sun, Moon, PenLine, History, Info,
+    Image, Lock, Stamp, Sun, Moon, PenLine, History, Info, GitCompare,
   } from "@lucide/svelte";
   import Toast from "./lib/components/Toast.svelte";
   import Dashboard from "./lib/views/Dashboard.svelte";
@@ -22,6 +22,7 @@
   import ImagesView from "./lib/views/ImagesView.svelte";
   import SecurityView from "./lib/views/SecurityView.svelte";
   import AnnotateView from "./lib/views/AnnotateView.svelte";
+  import CompareView from "./lib/views/CompareView.svelte";
   import ActivityView from "./lib/views/ActivityView.svelte";
 
   let showExitModal = false;
@@ -189,6 +190,7 @@
     images: ImagesView,
     security: SecurityView,
     annotate: AnnotateView,
+    compare: CompareView,
     activity: ActivityView,
   };
 
@@ -197,6 +199,7 @@
       group: "Editör",
       items: [
         { id: "editor", label: "PDF Düzenle", icon: PenLine },
+        { id: "compare", label: "PDF Karşılaştır", icon: GitCompare },
       ],
     },
     {
@@ -288,7 +291,7 @@
     </div>
   </nav>
 
-  <main class="flex min-w-0 flex-1 flex-col overflow-hidden {$currentView === 'editor' ? 'p-0' : 'overflow-y-auto p-6'}">
+  <main class="flex min-w-0 flex-1 flex-col overflow-hidden {$currentView === 'editor' ? 'p-0' : $currentView === 'compare' ? 'overflow-hidden p-4' : 'overflow-y-auto p-6'}">
     {#if $currentView === "dashboard"}
       <Dashboard />
     {:else}

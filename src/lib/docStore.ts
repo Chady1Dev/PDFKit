@@ -121,7 +121,7 @@ export async function openPdfDocument(path: string, forceReload = false): Promis
         handle,
         pageCount: handle.pageCount,
         currentPage: 1,
-        scale: 1.0,
+        scale: 1.5,
         annotations: loadedAnnotations,
         hasUnsavedChanges: false,
       };

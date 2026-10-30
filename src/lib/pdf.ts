@@ -11,6 +11,8 @@ export interface TextItemData {
   y: number;
   width: number;
   height: number;
+  fontName?: string;
+  fontSize?: number;
 }
 
 export interface PdfLink {
@@ -269,18 +271,30 @@ export async function openPdf(path: string, customData?: Uint8Array): Promise<Pd
       const pdfPage = await doc.getPage(page);
       const viewport = pdfPage.getViewport({ scale: 1.0 });
       const textContent = await pdfPage.getTextContent();
+      const styles = (textContent as any).styles || {};
       const items: TextItemData[] = [];
       for (const item of textContent.items as any[]) {
         if (!item.str || !item.str.trim()) continue;
-        const [, , , scaleY, tx, ty] = item.transform;
+        const [scaleX, skewY, , scaleY, tx, ty] = item.transform;
         const [vx, vy] = viewport.convertToViewportPoint(tx, ty);
-        const itemHeight = Math.abs(scaleY) || 12;
+        const fontSize = Math.hypot(scaleX || 0, skewY || 0) || Math.abs(scaleY) || 12;
+        const itemHeight = Math.abs(scaleY) || fontSize || 12;
+        const rawFont = item.fontName || "";
+        // Strip pdf.js internal document/font counter prefixes like "g_d16_f1" or "f1"
+        const cleanFontId = rawFont.replace(/^g_d\d+_/i, "").replace(/^f\d+$/i, "");
+        const family = styles[rawFont]?.fontFamily || "";
+        const styleFamily =
+          cleanFontId && family
+            ? `${cleanFontId}_${family}`
+            : cleanFontId || family || "Default";
         items.push({
           str: item.str,
           x: vx,
           y: vy - itemHeight,
-          width: item.width || (item.str.length * 8),
+          width: item.width || (item.str.length * fontSize * 0.52),
           height: itemHeight,
+          fontName: styleFamily,
+          fontSize: Math.round(fontSize * 10) / 10,
         });
       }
       pdfPage.cleanup();

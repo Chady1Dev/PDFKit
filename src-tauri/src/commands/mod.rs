@@ -1,4 +1,5 @@
 pub mod annotate;
+pub mod compare;
 pub mod compress;
 pub mod convert_office;
 pub mod conversion;
