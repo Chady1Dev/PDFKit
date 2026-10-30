@@ -1,6 +1,6 @@
 # PDFkit — Teknik Dokümantasyon
 
-> **Sürüm:** 0.1.0 · **Platform:** Windows 10 / 11 (x64) · **Lisans:** AGPL-3.0-or-later
+> **Sürüm:** 1.0.1 · **Platform:** Windows 10 / 11 (x64) · **Lisans:** AGPL-3.0-or-later
 > **Yığın:** Tauri v2 · Rust 2021 (`lopdf`) · Svelte 5 + TypeScript + Vite + TailwindCSS · `pdf.js` · Python (isteğe bağlı dönüştürme motoru)
 
 Bu belge PDFkit'in mimarisini, modüllerini, IPC sözleşmesini ve çekirdek algoritmalarını açıklar. Kullanıcıya yönelik tanıtım için [README.md](README.md) dosyasına bakın.
@@ -51,8 +51,8 @@ Tüm PDF işlemleri (birleştirme, ayırma, döndürme, sıkıştırma, şifrele
 
 | Bileşen | Boyut |
 | :--- | ---: |
-| NSIS kurulum paketi (`PDFkit_0.1.0_x64-setup.exe`) | ~4.1 MB |
-| MSI kurulum paketi (`PDFkit_0.1.0_x64_en-US.msi`) | ~5.0 MB |
+| NSIS kurulum paketi (`PDFkit_1.0.1_x64-setup.exe`) | ~4.5 MB |
+| MSI kurulum paketi (`PDFkit_1.0.1_x64_tr-TR.msi`) | ~6.2 MB |
 | Kurulu uygulama (`pdfkit.exe` + `scripts/`) | ~14 MB |
 | Python yorumlayıcısı (isteğe bağlı) | ~100–150 MB |
 | Dönüştürme paketleri: PPTX / XLSX / TXT için | ~82 MB |
@@ -135,8 +135,8 @@ npm run build:app
 | Dosya | Açıklama |
 | :--- | :--- |
 | `src-tauri/target/release/pdfkit.exe` | Taşınabilir çalıştırılabilir dosya |
-| `src-tauri/target/release/bundle/nsis/PDFkit_0.1.0_x64-setup.exe` | Kurulum sihirbazı |
-| `src-tauri/target/release/bundle/msi/PDFkit_0.1.0_x64_en-US.msi` | Kurumsal dağıtım paketi |
+| `src-tauri/target/release/bundle/nsis/PDFkit_1.0.1_x64-setup.exe` | Kurulum sihirbazı |
+| `src-tauri/target/release/bundle/msi/PDFkit_1.0.1_x64_tr-TR.msi` | Kurumsal dağıtım paketi |
 
 > MSI üretimi için `tauri.conf.json` içindeki `bundle.targets` listesinde `"msi"` bulunmalıdır.
 
@@ -401,7 +401,7 @@ Tarayıcı yazdırma penceresi kullanılmaz. Sayfalar arayüzde PNG olarak rende
 
 Windows'un yerleşik `Windows.Media.Ocr` motoru, `scripts/ocr_engine.ps1` üzerinden PowerShell ile çağrılır. Harici bir OCR motoru gerekmez. `add_searchable_ocr_layer`, tanınan kelimeleri görünmez metin modunda (`3 Tr`) sayfaya ekleyerek taranmış belgeleri aranabilir yapar.
 
-> Bu komutlar backend'de mevcuttur ancak 0.1.0 sürümünde arayüze bağlı değildir.
+> Bu komutlar backend'de mevcuttur ancak 1.0.1 sürümünde arayüze bağlı değildir.
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "pdfkit",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.1",
   "license": "AGPL-3.0-or-later",
   "author": "Çağdaş Polat <cagdas1128@gmail.com>",
   "type": "module",

@@ -17,8 +17,8 @@
 
 <br/>
 
-[📥 Windows Kurulum Paketi (.exe)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_0.1.0_x64-setup.exe) • 
-[🏢 Kurumsal Dağıtım Paketi (.msi)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_0.1.0_x64_tr-TR.msi) • 
+[📥 Windows Kurulum Paketi (.exe)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_1.0.1_x64-setup.exe) • 
+[🏢 Kurumsal Dağıtım Paketi (.msi)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_1.0.1_x64_tr-TR.msi) • 
 [📖 Teknik Dokümantasyon](DOCUMENTATION.md)
 
 </div>
@@ -111,10 +111,10 @@ PDFkit; Active Directory (GPO), Microsoft Intune, SCCM veya PDQ Deploy ile merke
 
 ```powershell
 # Sessiz (Silent) Kurulum
-msiexec.exe /i "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
+msiexec.exe /i "PDFkit_1.0.1_x64_tr-TR.msi" /qn /norestart
 
 # Sessiz Kaldırma
-msiexec.exe /x "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
+msiexec.exe /x "PDFkit_1.0.1_x64_tr-TR.msi" /qn /norestart
 ```
 Detaylı bilgi için [DOCUMENTATION.md](DOCUMENTATION.md) dosyasına göz atabilirsiniz.
 

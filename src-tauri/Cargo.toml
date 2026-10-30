@@ -1,6 +1,6 @@
 [package]
 name = "pdfkit"
-version = "0.1.0"
+version = "1.0.1"
 description = "Ultra-lightweight local-first PDF toolbox"
 edition = "2021"
 rust-version = "1.77"

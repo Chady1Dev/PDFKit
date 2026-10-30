@@ -17,8 +17,8 @@
 
 <br/>
 
-[📥 Windows Installer (.exe)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_0.1.0_x64-setup.exe) • 
-[🏢 Enterprise Deployment Package (.msi)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_0.1.0_x64_tr-TR.msi) • 
+[📥 Windows Installer (.exe)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_1.0.1_x64-setup.exe) • 
+[🏢 Enterprise Deployment Package (.msi)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_1.0.1_x64_tr-TR.msi) • 
 [📖 Technical Documentation](DOCUMENTATION.md)
 
 </div>
@@ -111,10 +111,10 @@ PDFkit is delivered as an `.msi` package ready for centralized deployment via Ac
 
 ```powershell
 # Silent unattended installation
-msiexec.exe /i "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
+msiexec.exe /i "PDFkit_1.0.1_x64_tr-TR.msi" /qn /norestart
 
 # Silent uninstall
-msiexec.exe /x "PDFkit_0.1.0_x64_tr-TR.msi" /qn /norestart
+msiexec.exe /x "PDFkit_1.0.1_x64_tr-TR.msi" /qn /norestart
 ```
 For detailed guidance, refer to [DOCUMENTATION.md](DOCUMENTATION.md).
 
