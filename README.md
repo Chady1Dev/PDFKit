@@ -17,8 +17,8 @@
 
 <br/>
 
-[📥 Windows Kurulum Paketi (.exe)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.0/PDFkit_0.1.0_x64-setup.exe) • 
-[🏢 Kurumsal Dağıtım Paketi (.msi)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.0/PDFkit_0.1.0_x64_tr-TR.msi) • 
+[📥 Windows Kurulum Paketi (.exe)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_0.1.0_x64-setup.exe) • 
+[🏢 Kurumsal Dağıtım Paketi (.msi)](https://github.com/Chady1Dev/PDFKit/releases/download/v1.0.1/PDFkit_0.1.0_x64_tr-TR.msi) • 
 [📖 Teknik Dokümantasyon](DOCUMENTATION.md)
 
 </div>
